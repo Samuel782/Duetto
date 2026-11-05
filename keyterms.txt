@@ -1,0 +1,8 @@
+# Un termine per riga: relatori, aziende, sigle, termini tecnici.
+# Massimo 100 termini da 50 caratteri ciascuno. Le righe con # sono ignorate.
+# Evita le parole comuni: troppi termini possono peggiorare il riconoscimento.
+Maria Rossi
+John Smith
+AssemblyAI
+DeepL
+OBS Studio

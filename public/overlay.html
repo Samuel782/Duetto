@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sottotitoli</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; }
+  body.preview { background: repeating-conic-gradient(#333 0 25%, #222 0 50%) 0 0 / 40px 40px; }
+  /* Tela fissa 1920x1080, scalata sulla finestra: le misure valgono su ogni schermo. */
+  #stage {
+    position: absolute; top: 50%; left: 50%; width: 1920px; height: 1080px;
+    display: flex; flex-direction: column; box-sizing: border-box;
+    transform-origin: center center; transition: opacity 0.3s;
+  }
+  #box { display: flex; flex-direction: column; border-radius: 8px; transition-property: opacity; }
+  #box.empty { visibility: hidden; }
+  .block { white-space: pre; }
+  .block:empty { display: none; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="box">
+    <div class="block" id="original"></div>
+    <div class="block" id="translation"></div>
+  </div>
+</div>
+<script src="/overlay.js"></script>
+</body>
+</html>

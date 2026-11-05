@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Impostazioni</title>
+<link rel="stylesheet" href="/control.css">
+</head>
+<body class="settings">
+<main>
+  <h1>Impostazioni</h1>
+
+  <section class="card">
+    <h2>Chiavi di accesso</h2>
+    <p class="note">Servono per trascrivere e tradurre. Restano salvate solo su questo computer.</p>
+
+    <label class="field">AssemblyAI (trascrizione)
+      <input id="assemblyaiKey" type="password" autocomplete="off" spellcheck="false">
+    </label>
+    <p class="result" id="assemblyaiResult"></p>
+    <a href="https://www.assemblyai.com/dashboard/signup" target="_blank" rel="noopener">Ottieni una chiave AssemblyAI gratuita</a>
+
+    <label class="field">DeepL (traduzione)
+      <input id="deeplKey" type="password" autocomplete="off" spellcheck="false">
+    </label>
+    <p class="result" id="deeplResult"></p>
+    <a href="https://www.deepl.com/pro-api" target="_blank" rel="noopener">Ottieni una chiave DeepL gratuita</a>
+  </section>
+
+  <section class="card">
+    <h2>Nomi e termini</h2>
+    <label class="field">Termini da riconoscere: relatori, aziende, sigle. Uno per riga, massimo 100.
+      <textarea id="keyterms" rows="6" spellcheck="false" placeholder="Maria Rossi&#10;John Smith&#10;OBS Studio"></textarea>
+    </label>
+    <label class="field">Glossario per la traduzione: una riga per termine, nella forma italiano,inglese.
+      <textarea id="glossary" rows="5" spellcheck="false" placeholder="sala stampa,press room&#10;tavola rotonda,round table"></textarea>
+    </label>
+  </section>
+
+  <section class="card">
+    <h2>Pulizia del testo</h2>
+    <label class="check"><input id="cleanFillers" type="checkbox"> Togli gli intercalari ("ehm", "cioè cioè", "you know")</label>
+    <label class="check"><input id="cleanProfanity" type="checkbox"> Attenua le parolacce</label>
+  </section>
+
+  <div class="save-bar">
+    <button id="save" class="action go">Salva e verifica</button>
+    <span id="saveNote" class="note"></span>
+  </div>
+</main>
+<script src="/settings.js"></script>
+</body>
+</html>

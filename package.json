@@ -1,0 +1,63 @@
+{
+  "name": "duetto",
+  "productName": "Duetto",
+  "version": "1.0.0",
+  "description": "Sottotitoli live italiano e inglese per dirette e maxischermi",
+  "author": "Samuel Luggeri",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "main": "electron/main.js",
+  "engines": {
+    "node": ">=20.6"
+  },
+  "scripts": {
+    "app": "electron .",
+    "dist": "electron-builder --mac --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:win": "electron-builder --win",
+    "dist:win:installer": "electron-builder --win nsis portable",
+    "start": "caffeinate -dims node --env-file=.env server/index.js",
+    "start:plain": "node --env-file=.env server/index.js",
+    "send-audio": "node test/send-audio.js",
+    "mock": "node test/mock-services.js",
+    "test": "node --test test/app.test.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "com.samuelluggeri.duetto",
+    "productName": "Duetto",
+    "artifactName": "Duetto-${version}-${os}-${arch}.${ext}",
+    "directories": { "output": "dist", "buildResources": "build" },
+    "files": ["electron/**", "server/**", "public/**", "package.json"],
+    "electronLanguages": ["en", "en-GB", "it"],
+    "mac": {
+      "category": "public.app-category.video",
+      "identity": "-",
+      "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }],
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Duetto ascolta l'ingresso audio scelto per trascrivere chi parla."
+      }
+    },
+    "win": {
+      "target": [{ "target": "zip", "arch": ["x64"] }]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Duetto-${version}-Windows-installazione.${ext}"
+    },
+    "portable": {
+      "artifactName": "Duetto-${version}-Windows-portatile.${ext}"
+    }
+  }
+}
