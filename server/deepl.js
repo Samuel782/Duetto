@@ -78,8 +78,9 @@ export class DeepL {
     return { Authorization: `DeepL-Auth-Key ${this.cfg.apiKey}`, 'Content-Type': 'application/json' };
   }
 
-  // Restituisce il testo tradotto, oppure null: chi chiama continua con il solo originale.
-  async translate(text, sourceLang, context) {
+  // Restituisce { text, lang }, oppure null: chi chiama continua con il solo originale.
+  // Con detect, la lingua indicata è solo un'ipotesi e DeepL rileva quella vera.
+  async translate(text, sourceLang, context, detect = false) {
     if (!this.cfg.apiKey || this.quotaExhausted) return null;
     if (this.inFlight >= MAX_IN_FLIGHT) {
       this.lastError = 'Troppe traduzioni in coda';
@@ -88,26 +89,43 @@ export class DeepL {
     this.inFlight += 1;
     const started = Date.now();
     try {
-      for (let attempt = 0; attempt < 2; attempt++) {
-        const result = await this._request(text, sourceLang, context);
-        if (result.text !== undefined) {
-          const ms = Date.now() - started;
-          this.avgMs = this.avgMs ? Math.round(this.avgMs * 0.9 + ms * 0.1) : ms;
-          this.lastError = '';
-          return result.text;
+      let lang = sourceLang;
+      let result = await this._withRetry(text, lang, context, detect);
+      if (result && detect) {
+        const found = (result.detected || '').slice(0, 2).toLowerCase();
+        if (found !== lang) {
+          // Ipotesi sbagliata: la destinazione era errata e serve una seconda richiesta.
+          // Se DeepL rileva una terza lingua vale l'ultima lingua valida, cioè l'ipotesi.
+          if (found === 'it' || found === 'en') lang = found;
+          result = await this._withRetry(text, lang, '', false);
         }
-        this.lastError = result.error;
-        if (!result.retry) break;
       }
-      warn(`DeepL: ${this.lastError}`);
-      return null;
+      if (!result) {
+        warn(`DeepL: ${this.lastError}`);
+        return null;
+      }
+      const ms = Date.now() - started;
+      this.avgMs = this.avgMs ? Math.round(this.avgMs * 0.9 + ms * 0.1) : ms;
+      this.lastError = '';
+      return { text: result.text, lang };
     } finally {
       this.inFlight -= 1;
     }
   }
 
-  async _request(text, sourceLang, context) {
-    const body = { text: [text], source_lang: SOURCE[sourceLang], target_lang: TARGET[sourceLang] };
+  async _withRetry(text, sourceLang, context, detect) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const result = await this._request(text, sourceLang, context, detect);
+      if (result.text !== undefined) return result;
+      this.lastError = result.error;
+      if (!result.retry) break;
+    }
+    return null;
+  }
+
+  async _request(text, sourceLang, context, detect) {
+    const body = { text: [text], target_lang: TARGET[sourceLang] };
+    if (!detect) body.source_lang = SOURCE[sourceLang];
     if (context && this.cfg.useContext) body.context = context;
     if (this.modelType) body.model_type = this.modelType;
     if (this.glossaryId) body.glossary_id = this.glossaryId;
@@ -120,7 +138,8 @@ export class DeepL {
       });
       if (res.ok) {
         const data = await res.json();
-        return { text: data.translations?.[0]?.text ?? '' };
+        const first = data.translations?.[0];
+        return { text: first?.text ?? '', detected: first?.detected_source_language };
       }
       await res.body?.cancel().catch(() => {});
       if (res.status === 456) {

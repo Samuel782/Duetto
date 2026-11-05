@@ -319,7 +319,7 @@ function renderStatus() {
     if (aai.bufferedMs > 300) add('Buffer audio', `${(aai.bufferedMs / 1000).toFixed(1)} s`, 'st-warn');
     if (!aai.configured) add('Chiave', 'AssemblyAI mancante: apri Impostazioni', 'st-bad');
     if (aai.lastError) add('Ultimo errore', aai.lastError, 'st-bad');
-    add('Lingua rilevata', LANG_LABELS[aai.lastDetected.slice(0, 2)] || aai.lastDetected || '—');
+    add('Lingua rilevata', LANG_LABELS[lastStatus.lastLanguage] || '—');
     if (appState) {
       add('Modalità', appState.languageMode);
       add('Streaming', `${VIEW_LABELS[appState.outputs.stream.view]} · finestre: ${lastStatus.overlays.stream}`);

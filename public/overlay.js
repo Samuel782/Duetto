@@ -8,12 +8,22 @@ const box = document.getElementById('box');
 const originalEl = document.getElementById('original');
 const translationEl = document.getElementById('translation');
 
-const MAX_SENTENCES = 8; // nessuna cronologia: solo ciò che può stare a schermo
+const MAX_KEPT_ORIGINALS = 20;
+const READING_CHARS_PER_SECOND = 22;
+const MIN_PAGE_READ_MS = 700;
+
 let profile = null;
-let sentences = []; // { id, text, translation, failed }
+let originalLines = [];
+let originalPageStart = 0; // prima riga della pagina visibile
 let partial = '';
+let partialContinues = false;
+let originals = new Map(); // id -> testo, per mostrarlo se la traduzione fallisce
+let pageLines = []; // righe tradotte della pagina visibile
+let pageReadUntil = 0; // quando la pagina sarà stata letta
+let queuedBlocks = []; // traduzioni in attesa, ognuna divisa in righe
+let pageTimer = null;
 let fadeTimer = null;
-let loadedFonts = new Set();
+const loadedFonts = new Set();
 
 // --- Impaginazione ---
 
@@ -35,31 +45,80 @@ function wrap(text, width) {
   return lines;
 }
 
-// Ogni frase inizia su una riga nuova; oltre il massimo scorre via il testo più vecchio.
-function lastLines(texts, width, max) {
-  return texts.flatMap((t) => wrap(t, width)).slice(-max).join('\n');
+// Un blocco dello stesso turno prosegue sulla riga dell'ultimo: le righe già formate non si muovono.
+function appendWrapped(lines, text, continues, width) {
+  if (!continues || !lines.length) return [...lines, ...wrap(text, width)];
+  return [...lines.slice(0, -1), ...wrap(`${lines[lines.length - 1]} ${text}`, width)];
+}
+
+// Le righe non si spostano mai: chi legge non deve ritrovare più in alto ciò che ha già letto.
+// Ogni riga resta al suo posto e, quando la pagina è piena, la successiva riparte dall'alto.
+function originalPage(style) {
+  const lines = partial ? appendWrapped(originalLines, partial, partialContinues, style.charsPerLine) : originalLines;
+  while (lines.length > originalPageStart + style.lines) originalPageStart += style.lines;
+  // Una revisione del parziale può accorciare il testo: non si torna alla pagina precedente.
+  const start = Math.min(originalPageStart, Math.max(0, lines.length - 1));
+  return lines.slice(start, start + style.lines).join('\n');
 }
 
 function render() {
   if (!profile) return;
   const { view, style } = profile;
-  const originals = sentences.map((s) => s.text);
-  if (partial) originals.push(partial);
-  let original = '';
-  let translation = '';
-  if (view === 'both' || view === 'original') {
-    original = lastLines(originals, style.charsPerLine, style.lines);
-  }
-  if (view === 'both') {
-    translation = lastLines(sentences.filter((s) => s.translation).map((s) => s.translation), style.charsPerLine, style.lines);
-  } else if (view === 'translation') {
-    // Niente parziali. Se la traduzione è fallita resta visibile l'originale.
-    const ready = sentences.filter((s) => s.translation || s.failed).map((s) => s.translation || s.text);
-    translation = lastLines(ready, style.charsPerLine, style.lines);
-  }
+  const showOriginal = view === 'both' || view === 'original';
+  const showTranslation = view === 'both' || view === 'translation';
+  const original = showOriginal ? originalPage(style) : '';
+  const translation = showTranslation ? pageLines.slice(-style.lines).join('\n') : '';
   if (originalEl.textContent !== original) originalEl.textContent = original;
   if (translationEl.textContent !== translation) translationEl.textContent = translation;
+  // Lo spazio di ogni lingua è riservato: una non sposta mai l'altra.
+  const height = `${style.lines * style.lineHeight}em`;
+  originalEl.style.display = showOriginal ? 'block' : 'none';
+  translationEl.style.display = showTranslation ? 'block' : 'none';
+  originalEl.style.height = height;
+  translationEl.style.height = height;
   box.classList.toggle('empty', !original && !translation);
+}
+
+// --- Traduzione a pagine ---
+
+// Un blocco si aggiunge sotto quelli già visibili se c'è posto. Altrimenti la pagina cambia, ma solo
+// quando è passato il tempo di leggerla, così nessuna riga viene mai saltata. Se il testo si
+// accumula il tempo di lettura si accorcia: il ritardo resta limitato con chi parla molto veloce.
+function showBlock(lines) {
+  const taken = lines.splice(0, profile.style.lines - pageLines.length);
+  pageLines = [...pageLines, ...taken];
+  const readMs = (taken.join(' ').length / READING_CHARS_PER_SECOND) * 1000;
+  pageReadUntil = Math.max(pageReadUntil, Date.now()) + Math.max(MIN_PAGE_READ_MS, readMs);
+  showText();
+  render();
+}
+
+function showQueuedText() {
+  clearTimeout(pageTimer);
+  pageTimer = null;
+  if (!profile) return;
+  const max = profile.style.lines;
+  while (queuedBlocks.length) {
+    const lines = queuedBlocks[0];
+    const fits = pageLines.length + lines.length <= max;
+    // Un blocco resta intero, se può stare in una pagina. Se è più lungo, riempie la pagina vuota.
+    if (fits || (!pageLines.length && lines.length > max)) {
+      showBlock(lines);
+      if (!lines.length) queuedBlocks.shift();
+      continue;
+    }
+    const wait = (pageReadUntil - Date.now()) / queuedBlocks.length;
+    if (wait > 0) {
+      pageTimer = setTimeout(showQueuedText, wait);
+      return;
+    }
+    pageLines = [];
+  }
+}
+
+function enqueueTranslation(text) {
+  queuedBlocks.push(wrap(text, profile.style.charsPerLine));
+  showQueuedText();
 }
 
 // --- Dissolvenza dopo il silenzio ---
@@ -70,6 +129,10 @@ function showText() {
   clearTimeout(fadeTimer);
   const after = (profile?.style.fadeAfter ?? 6) * 1000;
   fadeTimer = setTimeout(() => {
+    if (queuedBlocks.length) { // c'è ancora testo da leggere
+      showText();
+      return;
+    }
     const seconds = profile?.style.fadeDuration ?? 0.6;
     box.style.transitionDuration = `${seconds}s`;
     box.style.opacity = '0';
@@ -79,8 +142,15 @@ function showText() {
 
 function clearText() {
   clearTimeout(fadeTimer);
-  sentences = [];
+  clearTimeout(pageTimer);
+  pageTimer = null;
+  originalLines = [];
+  originalPageStart = 0;
   partial = '';
+  pageLines = [];
+  pageReadUntil = 0;
+  queuedBlocks = [];
+  originals = new Map();
   render();
 }
 
@@ -165,28 +235,29 @@ const handlers = {
   },
   partial(m) {
     partial = m.text;
+    partialContinues = !!m.cont;
     if (partial) showText();
     render();
   },
   final(m) {
+    if (!profile) return;
     partial = '';
-    sentences.push({ id: m.id, text: m.text, translation: '', failed: false });
-    if (sentences.length > MAX_SENTENCES) sentences.shift();
+    originalLines = appendWrapped(originalLines, m.text, m.cont, profile.style.charsPerLine);
+    // Le pagine già passate non servono più. Resta l'ultima riga, che il blocco successivo può continuare.
+    const passed = Math.min(originalPageStart, originalLines.length - 1);
+    originalLines = originalLines.slice(passed);
+    originalPageStart -= passed;
+    originals.set(m.id, m.text);
+    if (originals.size > MAX_KEPT_ORIGINALS) originals.delete(originals.keys().next().value);
     showText();
     render();
   },
   translation(m) {
-    const s = sentences.find((x) => x.id === m.id);
-    if (!s) return;
-    s.translation = m.text;
-    showText();
-    render();
+    if (profile) enqueueTranslation(m.text);
   },
+  // Senza traduzione, chi vede solo la traduzione legge l'originale.
   translationFailed(m) {
-    const s = sentences.find((x) => x.id === m.id);
-    if (!s) return;
-    s.failed = true;
-    render();
+    if (profile?.view === 'translation' && originals.has(m.id)) enqueueTranslation(originals.get(m.id));
   },
   clear: clearText,
 };

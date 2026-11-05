@@ -60,8 +60,7 @@ const link = new AssemblyLink({
   url: env.ASSEMBLYAI_WS_URL || 'wss://streaming.assemblyai.com/v3/ws',
   model: env.ASSEMBLYAI_SPEECH_MODEL || 'universal-3-6-pro',
   minTurnSilence: env.MIN_TURN_SILENCE || '',
-  maxTurnSilence: env.MAX_TURN_SILENCE || '',
-  maxTurnMs: (Number(env.MAX_TURN_SECONDS ?? 15) || 0) * 1000,
+  maxTurnSilence: env.MAX_TURN_SILENCE || '700', // chiude prima l'ultimo blocco quando chi parla si ferma
   rolloverBeforeMs: (Number(env.SESSION_ROLLOVER_BEFORE_SECONDS) || 120) * 1000,
   sessionMaxMs: (Number(env.SESSION_MAX_SECONDS) || 0) * 1000,
 });
@@ -113,16 +112,20 @@ setInterval(() => {
 // --- Elaborazione delle frasi ---
 
 let sentenceSeq = 0;
-let previous = { text: '', lang: null };
+let previous = { text: '', lang: null }; // contesto per DeepL: non viene tradotto né conteggiato
 let writeTail = Promise.resolve(); // mantiene l'ordine delle frasi nei file
+
+const isShortText = (text) => text.trim().split(/\s+/).length <= 2;
+const validDetected = (sentence) => {
+  const detected = sentence.detected.toLowerCase().slice(0, 2);
+  return detected === 'it' || detected === 'en' ? detected : '';
+};
 
 function resolveLanguage(sentence) {
   if (sentence.mode === 'IT') return 'it';
   if (sentence.mode === 'EN') return 'en';
-  const detected = sentence.detected.toLowerCase().slice(0, 2);
-  const valid = detected === 'it' || detected === 'en';
-  const isShort = sentence.text.trim().split(/\s+/).length <= 2;
-  if (valid && (!isShort || !state.lastLanguage)) return detected;
+  const detected = validDetected(sentence);
+  if (detected && (!isShortText(sentence.text) || !state.lastLanguage)) return detected;
   return state.lastLanguage || FALLBACK_LANGUAGE;
 }
 
@@ -133,9 +136,8 @@ function setLastLanguage(lang) {
   }
 }
 
-link.on('partial', (text) => {
-  const cleaned = clean(text);
-  if (cleaned) broadcast({ t: 'partial', text: cleaned });
+link.on('partial', (text, continuation) => {
+  broadcast({ t: 'partial', text: clean(text), cont: continuation });
 });
 
 link.on('final', (sentence) => {
@@ -144,27 +146,28 @@ link.on('final', (sentence) => {
     broadcast({ t: 'partial', text: '' });
     return;
   }
-  const lang = resolveLanguage(sentence);
-  const isShort = sentence.text.trim().split(/\s+/).length <= 2;
-  if (!isShort || !state.lastLanguage || sentence.mode !== 'AUTO') setLastLanguage(lang);
+  const guess = resolveLanguage(sentence);
+  const isShort = isShortText(sentence.text);
+  // In AUTO la lingua la conferma DeepL, frase per frase: quella di AssemblyAI è solo un'ipotesi, che
+  // sbaglia soprattutto ai cambi di lingua. Una seconda richiesta serve solo se l'ipotesi è errata.
+  // Una frase di una o due parole non basta a rilevarla e non cambia la lingua corrente.
+  const detect = sentence.mode === 'AUTO' && !isShort;
 
   const id = ++sentenceSeq;
   const endAt = Date.now();
-  broadcast({ t: 'final', id, text, lang });
+  broadcast({ t: 'final', id, text, lang: guess, cont: !!sentence.continuation });
 
-  const context = previous.lang === lang ? previous.text.slice(-500) : '';
-  previous = { text, lang };
+  const context = previous.lang === guess ? previous.text : '';
+  const translated = deepl.translate(text, guess, context, detect).catch(() => null);
 
-  const translated = deepl.translate(text, lang, context).then((raw) => {
-    const translation = raw ? clean(raw) : '';
+  // Le traduzioni arrivano in parallelo ma escono nell'ordine in cui le frasi sono state dette.
+  writeTail = writeTail.then(() => translated).then((result) => {
+    const lang = result?.lang || guess;
+    const translation = result?.text ? clean(result.text) : '';
     broadcast(translation ? { t: 'translation', id, text: translation } : { t: 'translationFailed', id });
-    return translation;
-  }).catch(() => {
-    broadcast({ t: 'translationFailed', id });
-    return '';
-  });
-
-  writeTail = writeTail.then(() => translated).then((translation) => {
+    if (!isShort || !state.lastLanguage || sentence.mode !== 'AUTO') setLastLanguage(lang);
+    const sameLanguage = previous.lang === lang;
+    previous = { text: `${sameLanguage ? previous.text : ''} ${text}`.trim().slice(-500), lang };
     transcript.addSentence({
       text, translation, lang, mode: sentence.mode,
       startAt: endAt - sentence.durationMs, endAt,

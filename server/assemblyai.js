@@ -3,6 +3,7 @@
 import { EventEmitter } from 'node:events';
 import WebSocket from 'ws';
 import { log, warn } from './log.js';
+import { TurnSegmenter } from './segmenter.js';
 
 const BYTES_PER_MS = 32; // PCM 16 bit, mono, 16 kHz
 const AUDIO_BUFFER_BYTES = 3000 * BYTES_PER_MS; // massimo 3 secondi di buffer
@@ -71,7 +72,6 @@ export class AssemblyLink extends EventEmitter {
     this.blockedUntil = 0;
     this.lastAudioAt = 0;
     this.lastError = '';
-    this.lastDetected = '';
     this.closedBilledMs = 0;
     this.fatal = false;
     this.tickTimer = setInterval(() => this._tick(), 1000);
@@ -183,7 +183,6 @@ export class AssemblyLink extends EventEmitter {
       bufferedMs: Math.round(this.backlogBytes / BYTES_PER_MS),
       retryInSeconds: this.retryAt > now ? Math.ceil((this.retryAt - now) / 1000) : 0,
       handoff: !!this.next,
-      lastDetected: this.lastDetected,
     };
   }
 
@@ -296,13 +295,16 @@ export class AssemblyLink extends EventEmitter {
     if (!s.emit) return;
     if (m.turn_order <= s.lastFinalOrder) return;
     let text = m.transcript || '';
-    const words = m.words || [];
+    let words = m.words || [];
 
     // Dopo un cambio di sessione, le parole già trascritte dalla sessione precedente si scartano.
     if (s.cutMs > 0 && words.length) {
       const kept = words.filter((w) => w.end > s.cutMs);
       if (!kept.length) return;
-      if (kept.length < words.length) text = kept.map((w) => w.text).join(' ');
+      if (kept.length < words.length) {
+        text = kept.map((w) => w.text).join(' ');
+        words = kept;
+      }
     }
 
     if (!s.turn || s.turn.order !== m.turn_order) {
@@ -310,37 +312,42 @@ export class AssemblyLink extends EventEmitter {
       // SpeechStarted, 200-500 ms dopo l'inizio reale: i timestamp della prima parola non servono,
       // perché possono anticipare il parlato di circa 1 s.
       s.turn = {
-        order: m.turn_order, mode: s.speechMode || this.mode, text: '', forced: false,
-        start: words[0]?.start ?? 0, lastEnd: 0,
+        order: m.turn_order, mode: s.speechMode || this.mode, text: '', lastEnd: 0,
+        segmenter: new TurnSegmenter(), emitted: 0,
       };
       s.speechMode = null;
     }
     const turn = s.turn;
     if (words.length) turn.lastEnd = words[words.length - 1].end;
-    if (text) turn.text = text;
 
     // U3 Pro: il turno è completo con end_of_turn e turn_is_formatted entrambi veri.
     const isPro = this.cfg.model.includes('pro');
     const isFinal = m.end_of_turn && (m.turn_is_formatted !== false || !isPro);
 
     if (!isFinal) {
-      if (turn.text) this.emit('partial', turn.text);
-      if (this.cfg.maxTurnMs && !turn.forced && turn.lastEnd - turn.start > this.cfg.maxTurnMs) {
-        turn.forced = true;
-        this._send(s, { type: 'ForceEndpoint' });
-      }
+      const { blocks, partial } = words.length ? turn.segmenter.update(words) : { blocks: [], partial: text };
+      for (const block of blocks) this._emitBlock(turn, block, '');
+      turn.text = partial;
+      this.emit('partial', partial, turn.emitted > 0);
       return;
     }
 
     s.lastFinalOrder = m.turn_order;
     if (turn.lastEnd) s.lastFinalEnd = turn.lastEnd;
     s.turn = null;
-    if (m.language_code) this.lastDetected = String(m.language_code).toLowerCase();
-    this.emit('final', {
-      text: turn.text, detected: m.language_code || '', mode: turn.mode,
-      durationMs: Math.max(0, turn.lastEnd - turn.start),
-    });
+    const rest = turn.segmenter.finish(words, text);
+    // La lingua di AssemblyAI vale per tutto il turno: è affidabile solo se il turno è un blocco unico.
+    if (rest?.text) this._emitBlock(turn, rest, turn.emitted ? '' : (m.language_code || ''));
+    else this.emit('partial', '', false);
     this._tryHandoff();
+  }
+
+  _emitBlock(turn, block, detected) {
+    this.emit('final', {
+      text: block.text, detected, mode: turn.mode, durationMs: block.durationMs, continuation: turn.emitted > 0,
+    });
+    turn.emitted += 1;
+    turn.mode = this.mode; // un cambio di modalità vale dal blocco successivo, anche a turno aperto
   }
 
   // Un turno rimasto aperto a sessione chiusa diventa finale, per non perdere il testo.
@@ -349,10 +356,7 @@ export class AssemblyLink extends EventEmitter {
     s.turn = null;
     if (!turn?.text || !s.emit) return;
     if (turn.lastEnd) s.lastFinalEnd = turn.lastEnd;
-    this.emit('final', {
-      text: turn.text, detected: '', mode: turn.mode,
-      durationMs: Math.max(0, turn.lastEnd - turn.start),
-    });
+    this._emitBlock(turn, { text: turn.text, durationMs: 0 }, '');
   }
 
   _onClosed(s, code, reason) {

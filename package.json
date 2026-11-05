@@ -1,7 +1,7 @@
 {
   "name": "duetto",
   "productName": "Duetto",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Sottotitoli live italiano e inglese per dirette e maxischermi",
   "author": "Samuel Luggeri",
   "type": "module",
@@ -34,13 +34,33 @@
     "appId": "com.samuelluggeri.duetto",
     "productName": "Duetto",
     "artifactName": "Duetto-${version}-${os}-${arch}.${ext}",
-    "directories": { "output": "dist", "buildResources": "build" },
-    "files": ["electron/**", "server/**", "public/**", "package.json"],
-    "electronLanguages": ["en", "en-GB", "it"],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**",
+      "server/**",
+      "public/**",
+      "package.json"
+    ],
+    "electronLanguages": [
+      "en",
+      "en-GB",
+      "it"
+    ],
     "mac": {
       "category": "public.app-category.video",
       "identity": "-",
-      "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }],
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
       "hardenedRuntime": true,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
@@ -49,7 +69,14 @@
       }
     },
     "win": {
-      "target": [{ "target": "zip", "arch": ["x64"] }]
+      "target": [
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
     },
     "nsis": {
       "oneClick": false,

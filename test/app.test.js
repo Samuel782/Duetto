@@ -9,6 +9,7 @@ import { afterEach, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 import { parseGlossaryCsv } from '../server/deepl.js';
+import { TurnSegmenter } from '../server/segmenter.js';
 import { createCleaner } from '../server/textclean.js';
 import { FRAME_MAGIC, startMock } from './mock-services.js';
 
@@ -138,6 +139,87 @@ test('glossario CSV', () => {
   assert.deepEqual(pairs, [['sala stampa', 'press room'], ['a, b', 'c']]);
 });
 
+test('segmentatore su parlato reale: blocchi brevi, nessuna parola persa', () => {
+  // 49 s di parlato continuo registrati da AssemblyAI: un unico turno da 991 caratteri.
+  const file = new URL('./fixtures/parlato-continuo.json', import.meta.url);
+  const messages = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const toWords = (m) => m.words.map(([text, start, end]) => ({ text, start, end }));
+  const seg = new TurnSegmenter();
+  const blocks = [];
+  for (const m of messages) {
+    if (m.end_of_turn) {
+      const rest = seg.finish(toWords(m), m.transcript);
+      if (rest) blocks.push(rest.text);
+    } else {
+      blocks.push(...seg.update(toWords(m)).blocks.map((b) => b.text));
+    }
+  }
+  assert.ok(blocks.length >= 10, `troppo pochi blocchi: ${blocks.length}`);
+  assert.ok(blocks.every((b) => b.length <= 90), `blocco troppo lungo: ${Math.max(...blocks.map((b) => b.length))}`);
+  const norm = (s) => s.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, ' ').split(/\s+/).filter(Boolean);
+  const said = norm(messages.at(-1).transcript);
+  const got = norm(blocks.join(' '));
+  assert.ok(Math.abs(said.length - got.length) <= 2, `parole: ${said.length} contro ${got.length}`);
+  // Conta le parole in ordine, tollerando le revisioni isolate dei parziali.
+  let j = 0;
+  for (const word of got) if (said.indexOf(word, j) >= 0 && said.indexOf(word, j) <= j + 3) j = said.indexOf(word, j) + 1;
+  assert.ok(j >= said.length - 2, `allineate solo ${j} parole su ${said.length}`);
+});
+
+test('segmentatore: tempi instabili e parole ripetute non creano doppioni', () => {
+  // Caso reale: "…input channels or mix channels." ripetuto perché i tempi si spostavano.
+  const script = 'so you are not eating up any of those input channels or mix channels, every input channel has a preamp section, a gate and a compressor for the sound';
+  const all = script.split(' ').map((text, i) => ({ text, start: i * 300, end: i * 300 + 300 }));
+  const seg = new TurnSegmenter();
+  const blocks = [];
+  for (let n = 1; n <= all.length; n++) {
+    // A ogni messaggio i tempi delle parole già dette si spostano fino a 2 s in avanti o indietro.
+    const shift = (n % 5 - 2) * 1000;
+    const words = all.slice(0, n).map((w) => ({ ...w, start: w.start + shift, end: w.end + shift }));
+    // L'ultima parola è più avanti, così le precedenti risultano stabili.
+    words[words.length - 1] = { ...words[words.length - 1], end: words[words.length - 1].end + 2500 };
+    blocks.push(...seg.update(words).blocks.map((b) => b.text));
+  }
+  const rest = seg.finish(all, script);
+  if (rest) blocks.push(rest.text);
+  assert.ok(blocks.length >= 2, 'il turno viene diviso');
+  assert.equal(blocks.join(' '), script);
+});
+
+test('parlato senza pause: traduzione a blocchi, in ordine, lingua rilevata da DeepL', async () => {
+  ctx = await setup();
+  ctx.mock.stats.continuous = true;
+  ctx.startAudio();
+  // Il turno non finisce mai: senza i blocchi non arriverebbe nessuna traduzione.
+  await waitFor(() => ctx.events.filter((e) => e.t === 'translation').length >= 6, 25000, 'traduzioni a turno aperto');
+  ctx.stopAudio();
+  ctx.cmd({ cmd: 'pause' });
+  await waitFor(() => ctx.mock.stats.closedSessions.length === 1, 4000, 'chiusura');
+  await sleep(500);
+
+  const finals = ctx.events.filter((e) => e.t === 'final');
+  assert.equal(finals[0].cont, false);
+  assert.ok(finals.slice(1).every((f) => f.cont), 'i blocchi successivi proseguono il turno');
+
+  // Nessuna parola persa o duplicata attraverso blocchi e parziali.
+  const words = finals.flatMap((f) => [...f.text.matchAll(/w(\d+)/g)].map((m) => Number(m[1])));
+  assertNoLossNoDup(words, 'blocchi');
+
+  // Le traduzioni escono nell'ordine delle frasi anche se arrivano in parallelo.
+  const ids = ctx.events.filter((e) => e.t === 'translation').map((e) => e.id);
+  assert.deepEqual(ids, [...ids].sort((a, b) => a - b));
+
+  // La lingua viene da DeepL e un'ipotesi sbagliata produce la destinazione giusta.
+  const bodies = ctx.mock.stats.translateBodies;
+  assert.ok(bodies.some((b) => !b.source_lang), 'almeno una richiesta con lingua da rilevare');
+  const lastByText = new Map(bodies.map((b) => [b.text[0], b]));
+  for (const [text, body] of lastByText) {
+    const first = Number(/w(\d+)/.exec(text)[1]);
+    const expected = Math.floor(first / 24) % 2 ? 'IT' : 'EN-GB';
+    assert.equal(body.target_lang, expected, `destinazione errata per ${text}`);
+  }
+});
+
 test('frasi, traduzione e file: lingue alternate in AUTO', async () => {
   ctx = await setup();
   ctx.startAudio();
@@ -150,8 +232,9 @@ test('frasi, traduzione e file: lingue alternate in AUTO', async () => {
   assert.ok(JSON.parse(url.searchParams.get('keyterms_prompt')).includes('DeepL'));
 
   const bodies = ctx.mock.stats.translateBodies;
-  assert.deepEqual([bodies[0].source_lang, bodies[0].target_lang], ['IT', 'EN-GB']);
-  assert.deepEqual([bodies[1].source_lang, bodies[1].target_lang], ['EN', 'IT']);
+  assert.equal(bodies[0].target_lang, 'EN-GB');
+  assert.equal(bodies[1].target_lang, 'IT');
+  assert.equal(bodies.length, ctx.events.filter((e) => e.t === 'final').length, 'ipotesi giusta: una sola richiesta');
   assert.ok(bodies.every((b) => b.glossary_id), 'glossario applicato');
   assert.ok(ctx.events.some((e) => e.t === 'partial'));
 
@@ -165,6 +248,22 @@ test('frasi, traduzione e file: lingue alternate in AUTO', async () => {
   assert.match(read('italiano.srt'), /^1\n.*\nw0 w1/m);
   assert.match(read('italiano.srt'), /\[IT\] w6/);
   assert.match(read('trascrizione.txt'), /\[IT\] \[modalità AUTO\]/);
+});
+
+test('AUTO: se AssemblyAI sbaglia la lingua, DeepL la corregge', async () => {
+  // Caso reale: "It's in the middle of winter." preso per italiano e rimasto senza traduzione.
+  ctx = await setup();
+  ctx.mock.stats.wrongLanguageCode = true;
+  ctx.startAudio();
+  await waitFor(() => ctx.events.filter((e) => e.t === 'translation').length >= 2, 12000, 'due traduzioni');
+  ctx.stopAudio();
+  const translations = ctx.events.filter((e) => e.t === 'translation');
+  assert.match(translations[0].text, /^\[EN-GB\] w0/, 'frase italiana tradotta in inglese');
+  assert.match(translations[1].text, /^\[IT\] w6/, 'frase inglese tradotta in italiano');
+  const dir = fs.readdirSync(path.join(ctx.tmp, 'output'))[0];
+  const text = fs.readFileSync(path.join(ctx.tmp, 'output', dir, 'trascrizione.txt'), 'utf8');
+  assert.match(text, /\[IT\] \[modalità AUTO\]\n  Originale:  w0/);
+  assert.match(text, /\[EN\] \[modalità AUTO\]\n  Originale:  w6/);
 });
 
 test('cambio modalità: niente riconnessioni, vale dalla frase successiva', async () => {

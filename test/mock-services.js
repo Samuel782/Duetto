@@ -28,7 +28,7 @@ export function startMock({ port = 0, expiresInSeconds = 10800, log = () => {} }
   const stats = {
     sessions: 0, updates: [], connectUrls: [], translateBodies: [], glossaries: [], forceEndpoints: 0,
     audioErrors: 0, usage: { character_count: 1000, character_limit: 500000 },
-    translateDelayMs: 0, translateStatus: 200, glossaryStatus: 201, stalled: false, closedSessions: [],
+    continuous: false, wrongLanguageCode: false, translateDelayMs: 0, translateStatus: 200, glossaryStatus: 201, stalled: false, closedSessions: [],
   };
   const glossaries = new Map();
 
@@ -50,7 +50,11 @@ export function startMock({ port = 0, expiresInSeconds = 10800, log = () => {} }
         setTimeout(() => {
           if (stats.translateStatus !== 200) { send(stats.translateStatus, { message: 'errore' }); return; }
           stats.usage.character_count += data.text[0].length;
-          send(200, { translations: [{ detected_source_language: data.source_lang, text: `[${data.target_lang}] ${data.text[0]}` }] });
+          // Senza source_lang, DeepL rileva la lingua: cambia ogni 24 parole nel parlato continuo
+          // e ogni frase da 6 parole negli altri casi.
+          const first = Number(/w(\d+)/.exec(data.text[0])?.[1] ?? 0);
+          const detected = data.source_lang || (Math.floor(first / (stats.continuous ? 24 : 6)) % 2 ? 'EN' : 'IT');
+          send(200, { translations: [{ detected_source_language: detected, text: `[${data.target_lang}] ${data.text[0]}` }] });
         }, stats.translateDelayMs);
         return;
       }
@@ -111,7 +115,8 @@ export function startMock({ port = 0, expiresInSeconds = 10800, log = () => {} }
       const list = [...c.words.values()];
       const transcript = `${list.map((w) => w.text).join(' ')}.`;
       // language_codes vale dal turno successivo: conta il valore all'inizio di questo turno.
-      const languageCode = c.languageCodes.length === 1 ? c.languageCodes[0] : c.lang;
+      let languageCode = c.languageCodes.length === 1 ? c.languageCodes[0] : c.lang;
+      if (stats.wrongLanguageCode) languageCode = languageCode === 'it' ? 'en' : 'it';
       ws.send(JSON.stringify({
         type: 'Turn', turn_order: session.turnOrder, turn_is_formatted: true, end_of_turn: true,
         end_of_turn_confidence: 1, transcript, utterance: transcript,
@@ -155,6 +160,23 @@ export function startMock({ port = 0, expiresInSeconds = 10800, log = () => {} }
       const globalMs = data.readUInt16LE(0) === FRAME_MAGIC ? data.readUInt32LE(2) : session.localMs;
       const localStart = session.localMs;
       session.localMs += ms;
+
+      // Parlato senza pause: un unico turno che cresce, con una virgola ogni 6 parole.
+      if (stats.continuous) {
+        const index = Math.floor(globalMs / WORD_MS);
+        const c = session.current || (session.current = { words: new Map(), lang: 'it', sentence: -1, languageCodes: session.languageCodes });
+        if (!c.words.has(index)) {
+          c.words.set(index, { text: `${wordAt(index)}${index % 6 === 5 ? ',' : ''}`, start: localStart, end: localStart + WORD_MS });
+          if (c.words.size === 1) ws.send(JSON.stringify({ type: 'SpeechStarted', timestamp: localStart, confidence: 0.98 }));
+          const list = [...c.words.values()];
+          ws.send(JSON.stringify({
+            type: 'Turn', turn_order: session.turnOrder, turn_is_formatted: true, end_of_turn: false,
+            end_of_turn_confidence: 0, transcript: list.map((w) => w.text).join(' '), utterance: '',
+            words: list.map((w) => ({ ...w, word_is_final: false, confidence: 0.9 })),
+          }));
+        }
+        return;
+      }
 
       const plan = scheduleFor(globalMs);
       const inSpeech = globalMs - plan.startMs < plan.words * WORD_MS;
