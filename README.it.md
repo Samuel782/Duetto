@@ -23,8 +23,8 @@ Non serve un trascrittore e non serve saper programmare: durante l'evento basta 
 ### Mac
 
 1. Scarica il file giusto per il tuo Mac. Se non sai quale, apri  → *Informazioni su questo Mac*.
-   - Chip Apple (M1, M2, M3…): `Duetto-1.0.1-mac-arm64.dmg`
-   - Processore Intel: `Duetto-1.0.1-mac-x64.dmg`
+   - Chip Apple (M1, M2, M3…): `Duetto-1.1.0-mac-arm64.dmg`
+   - Processore Intel: `Duetto-1.1.0-mac-x64.dmg`
 2. Apri il file e trascina **Duetto** nella cartella **Applicazioni**.
 3. Apri l'app. macOS la blocca, perché non è firmata con un certificato Apple. Chiudi l'avviso.
 4. Apri *Impostazioni di Sistema → Privacy e sicurezza*, scorri in basso e premi **Apri comunque**.
@@ -34,7 +34,7 @@ Il blocco si presenta solo la prima volta.
 
 ### Windows
 
-1. Scarica `Duetto-1.0.1-win-x64.zip`.
+1. Scarica `Duetto-1.1.0-win-x64.zip`.
 2. Fai clic destro sul file e scegli **Estrai tutto**. Non avviare l'app da dentro lo zip.
 3. Nella cartella estratta, apri **Duetto.exe**.
 4. Se compare "Windows ha protetto il PC", premi **Ulteriori informazioni**, poi **Esegui comunque**.

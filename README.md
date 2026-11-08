@@ -25,8 +25,8 @@ The app's interface is in Italian. This guide gives each button's name as it app
 ### Mac
 
 1. Download the right file for your Mac. If you're not sure which one, open  → *About This Mac*.
-   - Apple chip (M1, M2, M3…): `Duetto-1.0.1-mac-arm64.dmg`
-   - Intel processor: `Duetto-1.0.1-mac-x64.dmg`
+   - Apple chip (M1, M2, M3…): `Duetto-1.1.0-mac-arm64.dmg`
+   - Intel processor: `Duetto-1.1.0-mac-x64.dmg`
 2. Open the file and drag **Duetto** into the **Applications** folder.
 3. Open the app. macOS blocks it, because it isn't signed with an Apple certificate. Close the warning.
 4. Open *System Settings → Privacy & Security*, scroll down and click **Open Anyway**.
@@ -36,7 +36,7 @@ The block only happens the first time.
 
 ### Windows
 
-1. Download `Duetto-1.0.1-win-x64.zip`.
+1. Download `Duetto-1.1.0-win-x64.zip`.
 2. Right-click the file and choose **Extract All**. Don't run the app from inside the zip.
 3. In the extracted folder, open **Duetto.exe**.
 4. If "Windows protected your PC" appears, click **More info**, then **Run anyway**.
