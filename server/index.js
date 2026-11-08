@@ -378,6 +378,7 @@ const CONTROL_FILES = {
   '/control': ['control.html', 'text/html'],
   '/control.js': ['control.js', 'text/javascript'],
   '/control.css': ['control.css', 'text/css'],
+  '/motion.js': ['motion.js', 'text/javascript'],
   '/audio-worklet.js': ['audio-worklet.js', 'text/javascript'],
 };
 const OVERLAY_FILES = {

@@ -27,6 +27,11 @@ const loadedFonts = new Set();
 
 // --- Impaginazione ---
 
+// "Caratteri per riga" vale per l'originale. La traduzione ha la stessa larghezza in pixel:
+// con un carattere più piccolo ci stanno più lettere.
+const originalChars = (style) => style.charsPerLine;
+const translationChars = (style) => Math.max(10, Math.round(style.charsPerLine * style.size / style.sizeTranslation));
+
 function wrap(text, width) {
   const lines = [];
   let line = '';
@@ -54,7 +59,7 @@ function appendWrapped(lines, text, continues, width) {
 // Le righe non si spostano mai: chi legge non deve ritrovare più in alto ciò che ha già letto.
 // Ogni riga resta al suo posto e, quando la pagina è piena, la successiva riparte dall'alto.
 function originalPage(style) {
-  const lines = partial ? appendWrapped(originalLines, partial, partialContinues, style.charsPerLine) : originalLines;
+  const lines = partial ? appendWrapped(originalLines, partial, partialContinues, originalChars(style)) : originalLines;
   while (lines.length > originalPageStart + style.lines) originalPageStart += style.lines;
   // Una revisione del parziale può accorciare il testo: non si torna alla pagina precedente.
   const start = Math.min(originalPageStart, Math.max(0, lines.length - 1));
@@ -117,7 +122,7 @@ function showQueuedText() {
 }
 
 function enqueueTranslation(text) {
-  queuedBlocks.push(wrap(text, profile.style.charsPerLine));
+  queuedBlocks.push(wrap(text, translationChars(profile.style)));
   showQueuedText();
 }
 
@@ -187,23 +192,28 @@ function loadGoogleFont(name, weight) {
   }
 }
 
+function applyFont(el, font, source, weight, size, fontStyle, color) {
+  if (source === 'google') loadGoogleFont(font, weight);
+  const name = font.includes(',') ? font : `"${font}"`;
+  Object.assign(el.style, {
+    fontFamily: `${name}, Arial, sans-serif`, fontWeight: weight, fontSize: `${size}px`, fontStyle, color,
+  });
+}
+
 function applyStyle() {
   const s = profile.style;
-  if (s.fontSource === 'google') loadGoogleFont(s.font, s.weight);
-  const fontName = s.font.includes(',') ? s.font : `"${s.font}"`;
+  applyFont(originalEl, s.font, s.fontSource, s.weight, s.size, s.fontStyle, s.colorOriginal);
+  applyFont(translationEl, s.fontTranslation, s.fontSourceTranslation, s.weightTranslation, s.sizeTranslation,
+    s.fontStyleTranslation, s.colorTranslation);
   Object.assign(stage.style, {
     padding: `${s.marginY}px ${s.marginX}px`,
     justifyContent: { top: 'flex-start', center: 'center', bottom: 'flex-end' }[s.position],
     alignItems: { left: 'flex-start', center: 'center', right: 'flex-end' }[s.align],
     textAlign: s.align,
-    fontFamily: `${fontName}, Arial, sans-serif`,
-    fontWeight: s.weight,
-    fontSize: `${s.size}px`,
+    fontSize: `${s.size}px`, // misura di riferimento per i margini del riquadro
     lineHeight: s.lineHeight,
     textShadow: textShadow(s),
   });
-  originalEl.style.color = s.colorOriginal;
-  translationEl.style.color = s.colorTranslation;
   originalEl.style.order = s.order === 'original' ? 0 : 1;
   translationEl.style.order = s.order === 'original' ? 1 : 0;
   box.style.gap = `${s.gap}px`;
@@ -242,7 +252,7 @@ const handlers = {
   final(m) {
     if (!profile) return;
     partial = '';
-    originalLines = appendWrapped(originalLines, m.text, m.cont, profile.style.charsPerLine);
+    originalLines = appendWrapped(originalLines, m.text, m.cont, originalChars(profile.style));
     // Le pagine già passate non servono più. Resta l'ultima riga, che il blocco successivo può continuare.
     const passed = Math.min(originalPageStart, originalLines.length - 1);
     originalLines = originalLines.slice(passed);

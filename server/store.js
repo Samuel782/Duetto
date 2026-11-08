@@ -12,16 +12,28 @@ const num = (key, label, min, max, step = 1) => ({ key, label, type: 'number', m
 const color = (key, label) => ({ key, label, type: 'color' });
 const select = (key, label, options) => ({ key, label, type: 'select', options });
 
+const fontStyle = (key) => select(key, 'Stile', [['normal', 'Normale'], ['italic', 'Corsivo']]);
+const fontSource = (key) => select(key, 'Origine', [['system', 'Di sistema'], ['google', 'Google Font']]);
+
+// Originale e traduzione hanno carattere, dimensione e colore propri.
 export const STYLE_SCHEMA = [
-  { group: 'Carattere', fields: [
+  { group: 'Originale', fields: [
     { key: 'font', label: 'Font', type: 'font' },
-    select('fontSource', 'Origine', [['system', 'Di sistema'], ['google', 'Google Font']]),
+    fontSource('fontSource'),
     num('weight', 'Peso', 100, 900, 100),
     num('size', 'Dimensione', 12, 200),
+    fontStyle('fontStyle'),
+    color('colorOriginal', 'Colore'),
   ] },
-  { group: 'Colori e contorno', fields: [
-    color('colorOriginal', 'Originale'),
-    color('colorTranslation', 'Traduzione'),
+  { group: 'Traduzione', fields: [
+    { key: 'fontTranslation', label: 'Font', type: 'font' },
+    fontSource('fontSourceTranslation'),
+    num('weightTranslation', 'Peso', 100, 900, 100),
+    num('sizeTranslation', 'Dimensione', 12, 200),
+    fontStyle('fontStyleTranslation'),
+    color('colorTranslation', 'Colore'),
+  ] },
+  { group: 'Contorno e ombra', fields: [
     color('outlineColor', 'Contorno'),
     num('outlineWidth', 'Spessore contorno', 0, 12, 0.5),
     color('shadowColor', 'Ombra'),
@@ -56,7 +68,9 @@ const FIELDS = STYLE_SCHEMA.flatMap((g) => g.fields);
 
 export const DEFAULT_STYLES = {
   stream: {
-    font: 'Arial', fontSource: 'system', weight: 700, size: 44,
+    font: 'Arial', fontSource: 'system', weight: 700, size: 44, fontStyle: 'normal',
+    fontTranslation: 'Arial', fontSourceTranslation: 'system', weightTranslation: 700, sizeTranslation: 44,
+    fontStyleTranslation: 'normal',
     colorOriginal: '#ffffff', colorTranslation: '#ffffff',
     outlineColor: '#000000', outlineWidth: 3,
     shadowColor: '#000000', shadowBlur: 6, shadowOffset: 2,
@@ -66,7 +80,9 @@ export const DEFAULT_STYLES = {
     fadeDuration: 0.6, fadeAfter: 6,
   },
   room: {
-    font: 'Arial', fontSource: 'system', weight: 700, size: 72,
+    font: 'Arial', fontSource: 'system', weight: 700, size: 72, fontStyle: 'normal',
+    fontTranslation: 'Arial', fontSourceTranslation: 'system', weightTranslation: 700, sizeTranslation: 72,
+    fontStyleTranslation: 'normal',
     colorOriginal: '#ffffff', colorTranslation: '#ffd84d',
     outlineColor: '#000000', outlineWidth: 0,
     shadowColor: '#000000', shadowBlur: 0, shadowOffset: 0,
@@ -98,12 +114,24 @@ export function sanitizeStyle(patch) {
   return out;
 }
 
+// Fino alla 1.0.1 il carattere era unico: uno stile salvato allora lo applica anche alla traduzione.
+const TRANSLATION_PAIRS = [['font', 'fontTranslation'], ['fontSource', 'fontSourceTranslation'],
+  ['weight', 'weightTranslation'], ['size', 'sizeTranslation']];
+
+function sanitizeSavedStyle(saved) {
+  const style = sanitizeStyle(saved);
+  for (const [original, translation] of TRANSLATION_PAIRS) {
+    if (style[original] !== undefined && style[translation] === undefined) style[translation] = style[original];
+  }
+  return style;
+}
+
 export function sanitizePresets(input) {
   const out = {};
   if (!input || typeof input !== 'object') return out;
   for (const [name, style] of Object.entries(input).slice(0, 200)) {
     const clean = name.trim().slice(0, 60);
-    if (clean) out[clean] = sanitizeStyle(style);
+    if (clean) out[clean] = sanitizeSavedStyle(style);
   }
   return out;
 }
@@ -128,7 +156,7 @@ export class Store {
       this.state.outputs[out] = {
         view: VIEWS.includes(saved.view) ? saved.view : 'both',
         hidden: saved.hidden === true,
-        style: { ...DEFAULT_STYLES[out], ...sanitizeStyle(saved.style) },
+        style: { ...DEFAULT_STYLES[out], ...sanitizeSavedStyle(saved.style) },
       };
     }
     this.flush();

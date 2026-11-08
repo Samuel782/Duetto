@@ -208,7 +208,7 @@ function toggleCapture() {
 setInterval(() => {
   const db = peakHold > 0 ? 20 * Math.log10(peakHold) : -90;
   const pct = Math.max(0, Math.min(100, ((db + 60) / 60) * 100));
-  $('level').style.width = `${pct}%`;
+  $('level').style.transform = `translateX(${pct - 100}%)`;
   $('level').classList.toggle('hot', peakHold >= 0.98);
   if (!wantCapture) return;
   const now = Date.now();
@@ -288,6 +288,7 @@ function renderState() {
     hide.classList.toggle('hidden-on', profile.hidden);
   }
   syncStyleInputs();
+  updateSegments();
   renderPresets();
 }
 
@@ -429,6 +430,7 @@ $('styleTabs').addEventListener('click', (e) => {
   flushPatch();
   activeTab = e.target.dataset.tab;
   syncStyleInputs();
+  updateSegments();
 });
 
 $('styleReset').onclick = () => send({ cmd: 'styleReset', out: activeTab });
@@ -505,6 +507,17 @@ $('openFolder').onclick = () => send({ cmd: 'openOutputFolder' });
 $('reloadTerms').onclick = () => send({ cmd: 'reloadTerms' });
 $('demo').onclick = () => send({ cmd: 'demo', on: !lastStatus?.demo });
 $('drop').onclick = () => send({ cmd: 'simulateDrop', seconds: Number($('dropSeconds').value) || 10 });
+
+// --- Movimento ---
+
+// Gli indicatori dei controlli segmentati seguono lo stato confermato dal server.
+function updateSegments() {
+  document.querySelectorAll('.segmented').forEach((el) => el.updateThumb?.());
+}
+document.querySelectorAll('.segmented').forEach(Motion.segmentedControl);
+document.querySelectorAll('details').forEach(Motion.disclosure);
+// La linea sotto la barra compare solo quando qualcosa le scorre sotto.
+addEventListener('scroll', () => document.body.classList.toggle('scrolled', scrollY > 0), { passive: true });
 
 // --- Avvio ---
 

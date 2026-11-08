@@ -1,213 +1,219 @@
 # Duetto
 
-**Due lingue, due schermi, una sola regia: sottotitoli in diretta, in italiano e in inglese, per eventi, conferenze e dirette streaming.**
+**English** · [Italiano](README.it.md)
 
-Chi parla viene trascritto mentre parla e ogni frase viene tradotta nell'altra lingua. I sottotitoli compaiono in due posti, ognuno con il proprio aspetto: sulla diretta in OBS Studio e sul maxischermo in sala.
+**Two languages, two screens, one control room: live Italian and English subtitles for events, conferences and live streams.**
 
-Non serve un trascrittore e non serve saper programmare: durante l'evento basta qualche tasto.
+Speech is transcribed as it is spoken, and every sentence is translated into the other language. The subtitles appear in two places, each with its own look: on the live stream in OBS Studio and on the big screen in the venue.
 
-![La schermata di regia](docs/img/regia.png)
+You don't need a stenographer and you don't need to code: during the event a few keys are all it takes.
 
-## Cosa serve
+The app's interface is in Italian. This guide gives each button's name as it appears on screen, with a translation the first time it comes up.
 
-- Un computer **Mac** (macOS 13 o successivo) oppure **Windows** 10 o 11 a 64 bit
-- Una connessione a Internet: trascrizione e traduzione avvengono in cloud
-- L'audio di chi parla, per esempio un'uscita del mixer collegata con un'interfaccia audio USB
-- Due chiavi gratuite, spiegate più avanti: si ottengono in pochi minuti
-- OBS Studio, solo se fai una diretta streaming
+![The control room](docs/img/regia.png)
 
-## Installazione
+## What you need
+
+- A **Mac** (macOS 13 or later) or a 64-bit **Windows** 10 or 11 PC
+- An Internet connection: transcription and translation run in the cloud
+- The speakers' audio, for example a mixer output connected through a USB audio interface
+- Two free keys, explained below: they take a few minutes to get
+- OBS Studio, only if you are live streaming
+
+## Installation
 
 ### Mac
 
-1. Scarica il file giusto per il tuo Mac. Se non sai quale, apri  → *Informazioni su questo Mac*.
-   - Chip Apple (M1, M2, M3…): `Duetto-1.0.1-mac-arm64.dmg`
-   - Processore Intel: `Duetto-1.0.1-mac-x64.dmg`
-2. Apri il file e trascina **Duetto** nella cartella **Applicazioni**.
-3. Apri l'app. macOS la blocca, perché non è firmata con un certificato Apple. Chiudi l'avviso.
-4. Apri *Impostazioni di Sistema → Privacy e sicurezza*, scorri in basso e premi **Apri comunque**.
-5. Quando l'app lo chiede, consenti l'uso del **microfono**.
+1. Download the right file for your Mac. If you're not sure which one, open  → *About This Mac*.
+   - Apple chip (M1, M2, M3…): `Duetto-1.0.1-mac-arm64.dmg`
+   - Intel processor: `Duetto-1.0.1-mac-x64.dmg`
+2. Open the file and drag **Duetto** into the **Applications** folder.
+3. Open the app. macOS blocks it, because it isn't signed with an Apple certificate. Close the warning.
+4. Open *System Settings → Privacy & Security*, scroll down and click **Open Anyway**.
+5. When the app asks, allow access to the **microphone**.
 
-Il blocco si presenta solo la prima volta.
+The block only happens the first time.
 
 ### Windows
 
-1. Scarica `Duetto-1.0.1-win-x64.zip`.
-2. Fai clic destro sul file e scegli **Estrai tutto**. Non avviare l'app da dentro lo zip.
-3. Nella cartella estratta, apri **Duetto.exe**.
-4. Se compare "Windows ha protetto il PC", premi **Ulteriori informazioni**, poi **Esegui comunque**.
-5. Se il firewall chiede un permesso, consenti l'accesso alle reti private. Serve solo per aprire i sottotitoli da un altro computer.
+1. Download `Duetto-1.0.1-win-x64.zip`.
+2. Right-click the file and choose **Extract All**. Don't run the app from inside the zip.
+3. In the extracted folder, open **Duetto.exe**.
+4. If "Windows protected your PC" appears, click **More info**, then **Run anyway**.
+5. If the firewall asks for permission, allow access on private networks. This is only needed to open the subtitles from another computer.
 
-## Primo avvio: le due chiavi
+## First launch: the two keys
 
-Le chiavi sono i codici personali con cui l'app usa i servizi di trascrizione e di traduzione. Al primo avvio si apre da sola la finestra **Impostazioni**.
+The keys are the personal codes the app uses to access the transcription and translation services. On first launch the **Impostazioni** (Settings) window opens by itself.
 
-![La finestra Impostazioni](docs/img/impostazioni.png)
+![The Settings window](docs/img/impostazioni.png)
 
-1. **AssemblyAI** (trascrizione): [crea un account](https://www.assemblyai.com/dashboard/signup) e copia la chiave dalla pagina iniziale.
-2. **DeepL** (traduzione): [crea un account API](https://www.deepl.com/pro-api) e copia la chiave da *Account → API Keys*. Serve un account **API**: quello del normale traduttore DeepL non basta.
-3. Incolla le due chiavi e premi **Salva e verifica**. Un segno verde conferma che ogni chiave funziona.
+1. **AssemblyAI** (transcription): [create an account](https://www.assemblyai.com/dashboard/signup) and copy the key from the home page.
+2. **DeepL** (translation): [create an API account](https://www.deepl.com/pro-api) and copy the key from *Account → API Keys*. You need an **API** account: the regular DeepL Translator account won't do.
+3. Paste both keys and click **Salva e verifica** (Save and check). A green tick confirms each key works.
 
-Nella stessa finestra puoi aggiungere:
+In the same window you can add:
 
-- **Termini da riconoscere:** nomi dei relatori, aziende, sigle. Migliorano molto il riconoscimento dei nomi. Elenca solo nomi e sigle: le parole comuni non servono e troppi termini possono peggiorare il risultato.
-- **Glossario:** traduzioni obbligate di termini specifici, per esempio `tavola rotonda,round table`.
-- **Pulizia del testo:** toglie gli intercalari come "ehm" e attenua le parolacce.
+- **Termini da riconoscere** (terms to recognise): speaker names, companies, acronyms. They greatly improve name recognition. List only names and acronyms: common words don't help, and too many terms can make results worse.
+- **Glossario** (glossary): fixed translations for specific terms, for example `tavola rotonda,round table`.
+- **Pulizia del testo** (text clean-up): removes fillers such as "ehm" and tones down swear words.
 
-### Quanto costa
+### What it costs
 
-| Servizio | Offerta gratuita | Oltre l'offerta gratuita |
+| Service | Free offer | Beyond the free offer |
 |---|---|---|
-| AssemblyAI | 50 $ di crediti iniziali, circa 110 ore | 0,45 $ all'ora di collegamento |
-| DeepL | Fino a 1.000.000 di caratteri in totale, a seconda del piano | Piano a pagamento |
+| AssemblyAI | $50 of starting credit, about 110 hours | $0.45 per hour of connection |
+| DeepL | Up to 1,000,000 characters in total, depending on the plan | Paid plan |
 
-Un'ora di parlato continuo usa circa 54.000 caratteri DeepL. Prezzi e offerte possono cambiare: controlla i siti dei due servizi. La schermata di regia mostra i caratteri rimasti e una stima dei crediti usati.
+An hour of continuous speech uses about 54,000 DeepL characters. Prices and offers may change: check both services' websites. The control room shows the characters left and an estimate of the credit used.
 
-## Usare l'app in un evento
+## Using the app at an event
 
-1. **Scegli l'ingresso audio** e controlla che la barra verde si muova quando qualcuno parla. Finché non premi Avvia non si consuma nulla.
-2. **Collega le uscite:** [OBS](#diretta-streaming-con-obs) e [maxischermo](#maxischermo-in-sala).
-3. **Premi Avvia** (o la barra spaziatrice). I sottotitoli partono entro un paio di secondi.
-4. **Nelle interruzioni premi Pausa** (ancora la barra spaziatrice): non si consumano crediti.
-5. **A fine evento chiudi l'app** e recupera i file con **Apri cartella dei file**.
+1. **Choose the audio input** and check that the green bar moves when someone speaks. Nothing is used until you press Avvia.
+2. **Connect the outputs:** [OBS](#live-streaming-with-obs) and the [big screen](#big-screen-in-the-venue).
+3. **Press Avvia** (Start), or the space bar. Subtitles begin within a couple of seconds.
+4. **During breaks press Pausa** (Pause), again with the space bar: no credit is used.
+5. **At the end of the event close the app** and get the files with **Apri cartella dei file** (Open files folder).
 
-## Le funzioni
+## Features
 
-### Lingua: AUTO, IT, EN
+### Language: AUTO, IT, EN
 
-Tre grandi pulsanti scelgono la lingua parlata. Quello attivo è giallo, così si vede anche da lontano.
+A large selector chooses the spoken language. The active one is highlighted in blue, so you can see it from a distance.
 
-- **AUTO** riconosce da solo la lingua, frase per frase. È la scelta giusta quasi sempre, anche quando le lingue si alternano senza preavviso.
-- **IT** ed **EN** dicono all'app quale lingua si sta parlando e quindi in che direzione tradurre. Usali solo se ne sei certo: con la lingua sbagliata il testo si vede, ma resta senza traduzione.
+- **AUTO** detects the language by itself, sentence by sentence. It is almost always the right choice, even when languages switch without warning.
+- **IT** and **EN** tell the app which language is being spoken, and so which way to translate. Use them only when you are sure: with the wrong language the text appears but stays untranslated.
 
-Il cambio vale dalla frase successiva e il pubblico non si accorge di nulla.
+The change applies from the next sentence, and the audience notices nothing.
 
-### Due uscite indipendenti
+### Two independent outputs
 
-Streaming e sala hanno ciascuna la propria anteprima e i propri comandi. Per ogni uscita puoi scegliere:
+Streaming and the venue (Sala) each have their own preview and controls. For each output you can choose:
 
-- **Orig. + trad.:** testo originale e traduzione insieme
-- **Solo trad.:** solo la traduzione, che compare a blocchi di senso
-- **Solo orig.:** solo il testo originale, che compare mentre si parla
-- **Pulisci:** svuota subito lo schermo
-- **Nascondi:** toglie i sottotitoli finché non premi Mostra
+- **Orig. + trad.:** original text and translation together
+- **Solo trad.:** translation only, which appears in meaningful chunks
+- **Solo orig.:** original text only, which appears as it is spoken
+- **Pulisci** (Clear): empties the screen at once
+- **Nascondi** (Hide): removes the subtitles until you press Mostra (Show)
 
-### Diretta streaming con OBS
+### Live streaming with OBS
 
-I sottotitoli arrivano a OBS con lo sfondo trasparente, sopra al video. Il riquadro a scacchi qui sotto rappresenta la trasparenza.
+Subtitles reach OBS with a transparent background, over the video. The checkerboard below stands for transparency.
 
-![Uscita streaming con sfondo trasparente](docs/img/uscita-streaming.png)
+![Streaming output with a transparent background](docs/img/uscita-streaming.png)
 
-1. In **Collegamenti per OBS e altri computer** premi **Copia** sulla riga OBS.
+1. In **Collegamenti per OBS e altri computer** (links for OBS and other computers) click **Copia** (Copy) on the OBS row.
 
-   ![I collegamenti da copiare](docs/img/collegamenti.png)
+   ![The links to copy](docs/img/collegamenti.png)
 
-2. In OBS aggiungi una fonte **Browser** e incolla l'indirizzo.
-3. Imposta larghezza `1920` e altezza `1080`.
-4. Disattiva **Spegni la sorgente quando non è visibile**.
-5. Metti la fonte sopra il video.
+2. In OBS add a **Browser** source and paste the address.
+3. Set width `1920` and height `1080`.
+4. Turn off **Shutdown source when not visible**.
+5. Place the source above the video.
 
-### Maxischermo in sala
+### Big screen in the venue
 
-Sfondo nero, testo grande e traduzione in un altro colore, per leggere da lontano.
+Black background, large text and the translation in a different colour, to read from a distance.
 
-![Uscita per il maxischermo](docs/img/uscita-sala.png)
+![Big-screen output](docs/img/uscita-sala.png)
 
-- **Dallo stesso computer:** collega il maxischermo e premi **Apri su maxischermo**. I sottotitoli vanno a schermo intero sul secondo schermo. Per chiuderli, clicca su quella finestra e premi `Esc`.
-- **Da un altro computer sulla stessa rete:** copia la riga **Altro computer** e aprila in un browser a schermo intero.
+- **From the same computer:** connect the big screen and click **Apri su maxischermo** (Open on big screen). The subtitles go full screen on the second display. To close them, click that window and press `Esc`.
+- **From another computer on the same network:** copy the **Altro computer** (other computer) row and open it in a full-screen browser.
 
-### Stile su misura
+### Custom style
 
-Nel pannello **Stile** ogni uscita ha le proprie regolazioni, che si vedono subito senza ricaricare nulla: carattere, colori, contorno, ombra, sfondo, posizione, margini, numero di righe, lunghezza delle righe, dissolvenza.
+In the **Stile** (Style) panel each output has its own settings, which apply instantly without reloading anything: font, colours, outline, shadow, background, position, margins, number of lines, line length, fade-out.
 
-Puoi salvare gli stili con un nome e passarli a un altro computer con **Esporta JSON** e **Importa JSON**. Per i Google Font scrivi il nome e scegli **Google Font** come origine: serve Internet.
+The original and the translation each have their own font, weight, size, italics and colour. If the translation is smaller, its lines hold more words: **Caratteri per riga** (characters per line) applies to the original, and the translation takes up the same width.
 
-![Il pannello Stile](docs/img/stile.png)
+You can save styles under a name and move them to another computer with **Esporta JSON** and **Importa JSON** (export and import). For Google Fonts, type the name and choose **Google Font** as the source: this needs Internet.
 
-### Prova senza spendere
+![The Style panel](docs/img/stile.png)
 
-In **Termini, demo e test** il pulsante **Avvia demo** mostra frasi finte su tutte le uscite, senza consumare crediti e senza scrivere file: è il modo giusto per regolare gli stili. Una striscia arancione ricorda che è attiva. Si ferma da sola appena parte l'audio vero, ma **controlla sempre che sia spenta prima di andare in diretta**.
+### Try it for free
 
-### I file dei sottotitoli
+In **Termini, demo e test** (terms, demo and tests), the **Avvia demo** button shows sample sentences on every output, without using credit or writing files: it's the right way to adjust styles. An orange strip reminds you it is on. It stops by itself as soon as real audio starts, but **always check it is off before going live**.
 
-Durante l'evento l'app scrive di continuo nella cartella **Documenti/Duetto**, così non si perde nulla nemmeno in caso di arresto improvviso. Ogni avvio dell'app ha la propria sottocartella:
+### Subtitle files
 
-| File | Contenuto |
+During the event the app writes continuously to the **Documents/Duetto** folder, so nothing is lost even after a sudden shutdown. Each launch of the app gets its own subfolder:
+
+| File | Contents |
 |---|---|
-| `originale.srt` | Ogni frase nella lingua in cui è stata detta |
-| `italiano.srt` | Tutto in italiano |
-| `inglese.srt` | Tutto in inglese |
-| `trascrizione.txt` | Il testo completo con orari e lingua |
+| `originale.srt` | Each sentence in the language it was spoken in |
+| `italiano.srt` | Everything in Italian |
+| `inglese.srt` | Everything in English |
+| `trascrizione.txt` | The full text with times and language |
 
-I file `.srt` si caricano su YouTube e nei programmi di montaggio. I tempi sono approssimati, con uno scarto fino a circa un secondo.
+The `.srt` files can be uploaded to YouTube and into video editors. Timings are approximate, off by up to about one second.
 
-### Scorciatoie da tastiera
+### Keyboard shortcuts
 
-| Tasto | Azione |
+| Key | Action |
 |---|---|
-| `Spazio` | Avvia, pausa, riprendi |
-| `A` `I` `E` | Lingua AUTO, IT, EN |
-| `1` `2` `3` | Streaming: originale + traduzione, solo traduzione, solo originale |
-| `7` `8` `9` | Sala: originale + traduzione, solo traduzione, solo originale |
-| `4` `5` `6` | Entrambe le uscite insieme |
-| `Q` / `W` | Streaming: pulisci / nascondi o mostra |
-| `O` / `P` | Sala: pulisci / nascondi o mostra |
+| `Space` | Start, pause, resume |
+| `A` `I` `E` | Language AUTO, IT, EN |
+| `1` `2` `3` | Streaming: original + translation, translation only, original only |
+| `7` `8` `9` | Venue: original + translation, translation only, original only |
+| `4` `5` `6` | Both outputs together |
+| `Q` / `W` | Streaming: clear / hide or show |
+| `O` / `P` | Venue: clear / hide or show |
 
-Le scorciatoie non agiscono mentre scrivi in un campo: clicca altrove nella finestra per riattivarle.
+Shortcuts don't work while you are typing in a field: click elsewhere in the window to bring them back.
 
-### Pensata per reggere ore di diretta
+### Built to last hours on air
 
-- **Se cade la rete**, l'app si ricollega da sola e recupera gli ultimi secondi di audio. Il pubblico vede solo i sottotitoli sparire e tornare; l'avviso compare solo in regia.
-- **Il limite di 3 ore** di ogni sessione di AssemblyAI viene superato da solo, a fine frase, senza perdere parole.
-- **Se la traduzione non arriva**, resta visibile il testo originale.
-- **Il computer non va in stop** finché l'app è aperta.
-- **Chiudere per sbaglio è difficile:** l'app chiede conferma.
+- **If the network drops**, the app reconnects by itself and recovers the last few seconds of audio. The audience only sees the subtitles disappear and come back; the warning appears only in the control room.
+- **AssemblyAI's 3-hour limit** per session is handled automatically, at the end of a sentence, without losing words.
+- **If a translation doesn't arrive**, the original text stays visible.
+- **The computer doesn't go to sleep** while the app is open.
+- **Closing by mistake is hard:** the app asks for confirmation.
 
-## Se qualcosa non va
+## Troubleshooting
 
-| Problema | Cosa fare |
+| Problem | What to do |
 |---|---|
-| La barra del livello non si muove | Controlla l'ingresso scelto e il mixer. Su Mac: *Impostazioni di Sistema → Privacy e sicurezza → Microfono*. Su Windows: *Impostazioni → Privacy e sicurezza → Microfono* |
-| Avviso di saturazione in rosso | Il segnale è troppo forte: abbassalo dal mixer |
-| "AssemblyAI rifiuta la connessione" | Apri **Impostazioni** e premi **Salva e verifica**: la chiave è errata o i crediti sono finiti |
-| Si vede il testo ma non la traduzione | Controlla in **Stato** l'errore DeepL e i caratteri rimasti, e che la lingua non sia impostata male |
-| I sottotitoli non appaiono in OBS | Ricontrolla l'indirizzo: se la porta è occupata può cambiare, quindi ricopialo dall'app. Poi aggiorna la fonte |
-| Nomi trascritti male | Aggiungili ai **Termini da riconoscere** |
-| Le prime parole sono sbagliate | È normale: si correggono da sole in circa un secondo |
-| La traduzione arriva dopo l'originale | È normale: arriva qualche secondo dopo, un blocco di senso alla volta. Le righe restano ferme e cambiano a pagine, senza saltare nulla |
+| The level bar doesn't move | Check the chosen input and the mixer. On Mac: *System Settings → Privacy & Security → Microphone*. On Windows: *Settings → Privacy & security → Microphone* |
+| Red clipping warning | The signal is too loud: turn it down on the mixer |
+| "AssemblyAI rifiuta la connessione" (AssemblyAI refuses the connection) | Open **Impostazioni** and click **Salva e verifica**: the key is wrong or the credit has run out |
+| Text appears but no translation | In **Stato** (Status) check the DeepL error and the characters left, and that the language isn't set wrongly |
+| Subtitles don't appear in OBS | Check the address again: if the port is busy it can change, so copy it again from the app. Then refresh the source |
+| Names transcribed wrongly | Add them to the **Termini da riconoscere** |
+| The first words are wrong | That's normal: they correct themselves in about a second |
+| The translation arrives after the original | That's normal: it arrives a few seconds later, one meaningful chunk at a time. Lines stay still and change a page at a time, without skipping anything |
 
-Il registro degli errori è il file `app.log` nella cartella dei dati dell'app:
+The error log is the `app.log` file in the app's data folder:
 
 - **Mac:** `~/Library/Application Support/Duetto`
 - **Windows:** `%APPDATA%\Duetto`
 
-## Le prove prima dell'evento
+## Rehearsal checklist
 
-**Il giorno prima**
+**The day before**
 
-- [ ] Chiavi verificate con il segno verde e caratteri DeepL sufficienti
-- [ ] Nomi dei relatori e sigle aggiunti ai termini
-- [ ] Stili regolati con la demo, in OBS e sul maxischermo
-- [ ] Una prova vera di qualche minuto, con le stesse voci o microfoni se possibile
-- [ ] Aggiornamenti automatici e notifiche del computer disattivati
+- [ ] Keys checked with the green tick, and enough DeepL characters
+- [ ] Speaker names and acronyms added to the terms
+- [ ] Styles adjusted with the demo, in OBS and on the big screen
+- [ ] A real test of a few minutes, with the same voices or microphones if possible
+- [ ] Automatic updates and notifications turned off on the computer
 
-**Il giorno dell'evento**
+**On the day**
 
-- [ ] Computer collegato alla corrente
-- [ ] Ingresso audio giusto e barra del livello che si muove, senza avvisi rossi
-- [ ] OBS e maxischermo collegati: in **Stato** ogni uscita conta almeno 2 finestre, compresa l'anteprima
-- [ ] Demo spenta
-- [ ] Prova microfono e controllo dei sottotitoli su entrambe le uscite
+- [ ] Computer plugged into power
+- [ ] Right audio input, and the level bar moving with no red warnings
+- [ ] OBS and big screen connected: in **Stato** each output counts at least 2 windows, including the preview
+- [ ] Demo off
+- [ ] Microphone check, and subtitles checked on both outputs
 
 ## Privacy
 
-- L'audio viene inviato ad **AssemblyAI** e il testo a **DeepL** mentre l'app è in funzione. Avvisa relatori e organizzatori se l'evento lo richiede.
-- Le chiavi restano solo sul tuo computer, in un file non cifrato nella cartella dei dati dell'app: non condividere quella cartella.
-- I sottotitoli sono visibili a chiunque sulla stessa rete conosca l'indirizzo, ma la regia si apre solo dal computer su cui gira l'app.
+- While the app is running, audio is sent to **AssemblyAI** and text to **DeepL**. Tell speakers and organisers if the event requires it.
+- The keys stay only on your computer, in an unencrypted file in the app's data folder: don't share that folder.
+- The subtitles are visible to anyone on the same network who knows the address, but the control room only opens on the computer running the app.
 
-## Per chi costruisce l'app
+## For developers
 
-Serve [Node.js](https://nodejs.org) 20 o successivo.
+You need [Node.js](https://nodejs.org) 20 or later.
 
 ```bash
 npm install
@@ -217,42 +223,42 @@ npm install
 npm run app
 ```
 
-Il primo comando installa le dipendenze, il secondo avvia l'app senza impacchettarla.
+The first command installs the dependencies, the second starts the app without packaging it.
 
-Per creare i pacchetti nella cartella `dist/`:
+To build the packages into the `dist/` folder:
 
 ```bash
 npm run dist
 ```
 
-| Comando | Risultato |
+| Command | Result |
 |---|---|
-| `npm run dist:mac` | `.dmg` per Mac Apple e Intel |
-| `npm run dist:win` | `.zip` per Windows, si costruisce anche da Mac |
-| `npm run dist:win:installer` | Installatore e `.exe` portatile per Windows. Su un Mac Apple richiede Rosetta |
-| `npm test` | Prove automatiche con servizi finti, senza rete né crediti |
-| `npx electron scripts/screenshots.mjs` | Rifà gli screenshot di questa guida |
+| `npm run dist:mac` | `.dmg` for Apple and Intel Macs |
+| `npm run dist:win` | `.zip` for Windows, also builds on a Mac |
+| `npm run dist:win:installer` | Windows installer and portable `.exe`. On an Apple-chip Mac it needs Rosetta |
+| `npm test` | Automated tests with fake services, no network or credit needed |
+| `npx electron scripts/screenshots.mjs` | Regenerates the screenshots in this guide |
 
-**Togliere gli avvisi di sicurezza.** Gli avvisi al primo avvio spariscono solo firmando l'app, cosa che ha un costo:
+**Removing the security warnings.** The warnings on first launch only go away if the app is signed, which costs money:
 
-- **Mac:** serve un account Apple Developer. Togli `"identity": "-"` da `package.json` e segui la [guida alla firma di electron-builder](https://www.electron.build/code-signing).
-- **Windows:** serve un certificato di firma del codice, con la stessa guida.
+- **Mac:** you need an Apple Developer account. Remove `"identity": "-"` from `package.json` and follow [electron-builder's code signing guide](https://www.electron.build/code-signing).
+- **Windows:** you need a code signing certificate, with the same guide.
 
-La versione da riga di comando resta disponibile: copia `.env.example` in `.env`, inserisci le chiavi e usa `npm start`.
+A command-line version is still available: copy `.env.example` to `.env`, add the keys and run `npm start`.
 
 ```text
-electron/main.js       finestre, permessi, chiusura sicura
-server/index.js        pagine, comandi, elaborazione delle frasi
-server/assemblyai.js   sessione, riconnessione, cambio di sessione senza perdite
-server/deepl.js        traduzione, utilizzo, glossario
-server/settings.js     chiavi e preferenze
-server/store.js        stato salvato e schema degli stili
-server/textclean.js    intercalari e parolacce
-server/transcript.js   file SRT e TXT
-public/                schermate dell'app e cattura audio
-test/                  prove automatiche, finti servizi, invio di file audio
+electron/main.js       windows, permissions, safe shutdown
+server/index.js        pages, commands, sentence processing
+server/assemblyai.js   session, reconnection, lossless session handover
+server/deepl.js        translation, usage, glossary
+server/settings.js     keys and preferences
+server/store.js        saved state and style schema
+server/textclean.js    fillers and swear words
+server/transcript.js   SRT and TXT files
+public/                app screens and audio capture
+test/                  automated tests, fake services, audio file sender
 ```
 
-## Licenza
+## Licence
 
-Distribuito con licenza [MIT](LICENSE). Usa AssemblyAI e DeepL, servizi di terze parti con i propri termini e costi.
+Released under the [MIT](LICENSE) licence. Uses AssemblyAI and DeepL, third-party services with their own terms and costs.

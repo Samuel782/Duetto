@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 import { parseGlossaryCsv } from '../server/deepl.js';
 import { TurnSegmenter } from '../server/segmenter.js';
+import { Store } from '../server/store.js';
 import { createCleaner } from '../server/textclean.js';
 import { FRAME_MAGIC, startMock } from './mock-services.js';
 
@@ -416,5 +417,23 @@ test('stato persistente e valori importati validati', async () => {
   assert.equal(saved.outputs.room.style.size, 200);
   assert.equal(saved.outputs.room.style.colorOriginal, '#ffffff');
   assert.equal(saved.outputs.room.style.font, 'Arial');
-  assert.deepEqual(saved.presets.Prova, { size: 50 });
+  assert.deepEqual(saved.presets.Prova, { size: 50, sizeTranslation: 50 });
+});
+
+test('stili della 1.0.1: la traduzione eredita il carattere unico', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'duetto-store-'));
+  const file = path.join(tmp, 'state.json');
+  fs.writeFileSync(file, JSON.stringify({
+    outputs: { room: { style: { font: 'Verdana', weight: 400, size: 90 } } },
+    presets: { Vecchio: { size: 30 }, Nuovo: { size: 30, sizeTranslation: 20 } },
+  }));
+  const store = new Store(file, 'AUTO');
+  const room = store.state.outputs.room.style;
+  assert.equal(room.fontTranslation, 'Verdana');
+  assert.equal(room.weightTranslation, 400);
+  assert.equal(room.sizeTranslation, 90);
+  assert.equal(store.state.outputs.stream.style.sizeTranslation, 44, 'uscita non personalizzata');
+  assert.equal(store.state.presets.Vecchio.sizeTranslation, 30);
+  assert.equal(store.state.presets.Nuovo.sizeTranslation, 20, 'valore separato già scelto');
+  fs.rmSync(tmp, { recursive: true, force: true });
 });

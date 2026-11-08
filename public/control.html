@@ -7,17 +7,18 @@
 <link rel="stylesheet" href="/control.css">
 </head>
 <body>
-<div id="banner" hidden></div>
+<header class="toolbar">
+  <h1>Duetto</h1>
+  <div id="banner" role="status" hidden></div>
+  <div class="toolbar-actions">
+    <button id="openRoom">Apri su maxischermo</button>
+    <button id="openFolder" hidden>Apri cartella dei file</button>
+    <button id="openSettings">Impostazioni</button>
+  </div>
+</header>
 
 <div class="layout">
   <main>
-    <div class="topbar">
-      <h1>Duetto</h1>
-      <button id="openRoom">Apri su maxischermo</button>
-      <button id="openFolder" hidden>Apri cartella dei file</button>
-      <button id="openSettings">Impostazioni</button>
-    </div>
-
     <section class="card">
       <h2>Audio</h2>
       <div class="row">
@@ -34,7 +35,7 @@
 
     <section class="card">
       <h2>Lingua parlata</h2>
-      <div class="modes" id="modes">
+      <div class="segmented large" id="modes">
         <button data-mode="AUTO">AUTO</button>
         <button data-mode="IT">IT</button>
         <button data-mode="EN">EN</button>
@@ -43,9 +44,9 @@
 
     <section class="outputs">
       <div class="card output" data-out="stream">
-        <h2>Streaming <span class="badge" data-hidden-badge>NASCOSTO</span></h2>
+        <h2>Streaming <span class="badge" data-hidden-badge>Nascosto</span></h2>
         <div class="preview"><iframe src="/overlay?out=stream&preview=1" title="Anteprima streaming"></iframe></div>
-        <div class="views">
+        <div class="segmented views">
           <button data-view="both">Orig. + trad.</button>
           <button data-view="translation">Solo trad.</button>
           <button data-view="original">Solo orig.</button>
@@ -56,9 +57,9 @@
         </div>
       </div>
       <div class="card output" data-out="room">
-        <h2>Sala <span class="badge" data-hidden-badge>NASCOSTO</span></h2>
+        <h2>Sala <span class="badge" data-hidden-badge>Nascosto</span></h2>
         <div class="preview"><iframe src="/overlay?out=room&preview=1" title="Anteprima sala"></iframe></div>
-        <div class="views">
+        <div class="segmented views">
           <button data-view="both">Orig. + trad.</button>
           <button data-view="translation">Solo trad.</button>
           <button data-view="original">Solo orig.</button>
@@ -73,41 +74,45 @@
     <section class="card">
       <details>
         <summary>Collegamenti per OBS e altri computer</summary>
-        <div class="links" id="links"></div>
+        <div class="disclosure-body">
+          <div class="links" id="links"></div>
+        </div>
       </details>
     </section>
 
     <section class="card">
       <details>
         <summary>Stile</summary>
-        <div class="tabs" id="styleTabs">
-          <button data-tab="stream">Streaming</button>
-          <button data-tab="room">Sala</button>
-        </div>
-        <div id="styleFields"></div>
-        <datalist id="fonts">
-          <option value="Arial"></option><option value="Helvetica"></option>
-          <option value="Helvetica Neue"></option><option value="Verdana"></option>
-          <option value="Georgia"></option><option value="Roboto"></option>
-          <option value="Open Sans"></option><option value="Montserrat"></option>
-          <option value="Lato"></option><option value="Inter"></option>
-        </datalist>
-        <div class="row">
-          <button id="styleReset">Ripristina predefinito</button>
-        </div>
-        <h3>Preset</h3>
-        <div class="row">
-          <label class="grow">Nome <input id="presetName" type="text" maxlength="60"></label>
-          <button id="presetSave">Salva</button>
-        </div>
-        <div class="row">
-          <label class="grow">Salvati <select id="presetList"></select></label>
-          <button id="presetLoad">Applica</button>
-          <button id="presetDelete">Elimina</button>
-        </div>
-        <div class="row">
-          <button id="presetExport">Esporta JSON</button>
-          <label class="file-button">Importa JSON<input id="presetImport" type="file" accept="application/json,.json" hidden></label>
+        <div class="disclosure-body">
+          <div class="segmented tabs" id="styleTabs">
+            <button data-tab="stream">Streaming</button>
+            <button data-tab="room">Sala</button>
+          </div>
+          <div id="styleFields"></div>
+          <datalist id="fonts">
+            <option value="Arial"></option><option value="Helvetica"></option>
+            <option value="Helvetica Neue"></option><option value="Verdana"></option>
+            <option value="Georgia"></option><option value="Roboto"></option>
+            <option value="Open Sans"></option><option value="Montserrat"></option>
+            <option value="Lato"></option><option value="Inter"></option>
+          </datalist>
+          <div class="row">
+            <button id="styleReset">Ripristina predefinito</button>
+          </div>
+          <h3>Preset</h3>
+          <div class="row">
+            <label class="grow">Nome <input id="presetName" type="text" maxlength="60"></label>
+            <button id="presetSave">Salva</button>
+          </div>
+          <div class="row">
+            <label class="grow">Salvati <select id="presetList"></select></label>
+            <button id="presetLoad">Applica</button>
+            <button id="presetDelete">Elimina</button>
+          </div>
+          <div class="row">
+            <button id="presetExport">Esporta JSON</button>
+            <label class="file-button">Importa JSON<input id="presetImport" type="file" accept="application/json,.json" hidden></label>
+          </div>
         </div>
       </details>
     </section>
@@ -115,15 +120,17 @@
     <section class="card">
       <details>
         <summary>Termini, demo e test</summary>
-        <div class="row">
-          <button id="reloadTerms">Ricarica termini e glossario</button>
-          <button id="demo">Avvia demo</button>
+        <div class="disclosure-body">
+          <div class="row">
+            <button id="reloadTerms">Ricarica termini e glossario</button>
+            <button id="demo">Avvia demo</button>
+          </div>
+          <div class="row">
+            <label>Secondi di caduta <input id="dropSeconds" type="number" value="10" min="1" max="120"></label>
+            <button id="drop">Simula caduta di rete</button>
+          </div>
+          <div id="notice" class="note"></div>
         </div>
-        <div class="row">
-          <label>Secondi di caduta <input id="dropSeconds" type="number" value="10" min="1" max="120"></label>
-          <button id="drop">Simula caduta di rete</button>
-        </div>
-        <div id="notice" class="note"></div>
       </details>
     </section>
   </main>
@@ -136,17 +143,18 @@
     <section class="card shortcuts">
       <h2>Scorciatoie</h2>
       <dl>
-        <dt>A I E</dt><dd>Lingua AUTO, IT, EN</dd>
-        <dt>Spazio</dt><dd>Avvia, pausa, riprendi</dd>
-        <dt>1 2 3</dt><dd>Streaming: entrambe, trad., orig.</dd>
-        <dt>7 8 9</dt><dd>Sala: entrambe, trad., orig.</dd>
-        <dt>4 5 6</dt><dd>Tutte le uscite: entrambe, trad., orig.</dd>
-        <dt>Q W</dt><dd>Streaming: pulisci, nascondi</dd>
-        <dt>O P</dt><dd>Sala: pulisci, nascondi</dd>
+        <dt><kbd>A</kbd><kbd>I</kbd><kbd>E</kbd></dt><dd>Lingua AUTO, IT, EN</dd>
+        <dt><kbd>Spazio</kbd></dt><dd>Avvia, pausa, riprendi</dd>
+        <dt><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></dt><dd>Streaming: entrambe, trad., orig.</dd>
+        <dt><kbd>7</kbd><kbd>8</kbd><kbd>9</kbd></dt><dd>Sala: entrambe, trad., orig.</dd>
+        <dt><kbd>4</kbd><kbd>5</kbd><kbd>6</kbd></dt><dd>Tutte le uscite: entrambe, trad., orig.</dd>
+        <dt><kbd>Q</kbd><kbd>W</kbd></dt><dd>Streaming: pulisci, nascondi</dd>
+        <dt><kbd>O</kbd><kbd>P</kbd></dt><dd>Sala: pulisci, nascondi</dd>
       </dl>
     </section>
   </aside>
 </div>
+<script src="/motion.js"></script>
 <script src="/control.js"></script>
 </body>
 </html>
