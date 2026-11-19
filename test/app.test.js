@@ -13,6 +13,8 @@ import { TurnSegmenter } from '../server/segmenter.js';
 import { Settings, setSecretStore } from '../server/settings.js';
 import { Store } from '../server/store.js';
 import { checkForUpdate, isNewer } from '../server/updates.js';
+import { captionChunks, obsAuth } from '../server/obs.js';
+import { WebSocketServer } from 'ws';
 import { createCleaner } from '../server/textclean.js';
 import { FRAME_MAGIC, startMock } from './mock-services.js';
 
@@ -238,7 +240,8 @@ test('frasi, traduzione e file: lingue alternate in AUTO', async () => {
   assert.equal(bodies[0].target_lang, 'EN-GB');
   assert.equal(bodies[1].target_lang, 'IT');
   assert.equal(bodies.length, ctx.events.filter((e) => e.t === 'final').length, 'ipotesi giusta: una sola richiesta');
-  assert.ok(bodies.every((b) => b.glossary_id), 'glossario applicato');
+  // DeepL accetta il glossario solo con la lingua di partenza indicata: non quando la rileva.
+  assert.ok(bodies.every((b) => (b.source_lang ? b.glossary_id : !b.glossary_id)), 'glossario solo con source_lang');
   assert.ok(ctx.events.some((e) => e.t === 'partial'));
 
   const finals = ctx.events.filter((e) => e.t === 'final');
@@ -265,8 +268,8 @@ test('AUTO: se AssemblyAI sbaglia la lingua, DeepL la corregge', async () => {
   assert.match(translations[1].text, /^\[IT\] w6/, 'frase inglese tradotta in italiano');
   const dir = fs.readdirSync(path.join(ctx.tmp, 'output'))[0];
   const text = fs.readFileSync(path.join(ctx.tmp, 'output', dir, 'trascrizione.txt'), 'utf8');
-  assert.match(text, /\[IT\] \[modalità AUTO\]\n  Originale:  w0/);
-  assert.match(text, /\[EN\] \[modalità AUTO\]\n  Originale:  w6/);
+  assert.match(text, /\[IT\] \[modalità AUTO\]\n  Originale: w0/);
+  assert.match(text, /\[EN\] \[modalità AUTO\]\n  Originale: w6/);
 });
 
 test('cambio modalità: niente riconnessioni, vale dalla frase successiva', async () => {
@@ -284,7 +287,7 @@ test('cambio modalità: niente riconnessioni, vale dalla frase successiva', asyn
   ctx.stopAudio();
   await waitFor(() => {
     const dir = fs.existsSync(path.join(ctx.tmp, 'output')) && fs.readdirSync(path.join(ctx.tmp, 'output'))[0];
-    return dir && fs.readFileSync(path.join(ctx.tmp, 'output', dir, 'trascrizione.txt'), 'utf8').includes('Modalità lingua: EN');
+    return dir && fs.readFileSync(path.join(ctx.tmp, 'output', dir, 'trascrizione.txt'), 'utf8').includes('Modalità lingua: en');
   }, 2000, 'riga di modalità nel file');
 });
 
@@ -415,7 +418,7 @@ test('stato persistente e valori importati validati', async () => {
   ctx.cmd({ cmd: 'presetImport', presets: { Prova: { size: 50, evil: 'x' } } });
   await sleep(800);
   const saved = JSON.parse(fs.readFileSync(path.join(ctx.tmp, 'data', 'state.json'), 'utf8'));
-  assert.equal(saved.languageMode, 'IT');
+  assert.equal(saved.languageMode, 'it');
   assert.equal(saved.outputs.room.style.size, 200);
   assert.equal(saved.outputs.room.style.colorOriginal, '#ffffff');
   assert.equal(saved.outputs.room.style.font, 'Arial');
@@ -481,11 +484,13 @@ test('traduzioni inglesi: ogni testo dell\'interfaccia ha la sua', async () => {
   // Nomi propri e sigle restano uguali nelle due lingue.
   const same = new Set(['AUTO', 'IT', 'EN', 'Duetto', 'Audio', 'Font', 'Google Font', 'Preset', 'Streaming', 'File', 'English', 'Server', 'OBS']);
   const keys = new Set();
-  for (const f of ['public/control.js', 'public/settings.js', 'server/index.js', 'server/deepl.js', 'server/assemblyai.js', 'electron/main.js']) {
+  for (const f of ['public/control.js', 'public/settings.js', 'server/index.js', 'server/deepl.js', 'server/assemblyai.js', 'server/obs.js', 'electron/main.js']) {
     const src = fs.readFileSync(path.join(root, f), 'utf8');
     for (const m of src.matchAll(/\bt\('((?:[^'\\]|\\.)*)'/g)) keys.add(m[1].replace(/\\'/g, "'"));
   }
   const { STYLE_SCHEMA } = await import('../server/store.js');
+  const { LANGUAGES } = await import('../server/languages.js');
+  for (const l of LANGUAGES) keys.add(l.name);
   for (const g of STYLE_SCHEMA) {
     keys.add(g.group);
     for (const f of g.fields) { keys.add(f.label); for (const [, text] of f.options || []) keys.add(text); }
@@ -533,4 +538,83 @@ test('aggiornamenti: confronto versioni e risposta di GitHub', async () => {
     server.close();
   }
   assert.equal(await checkForUpdate('1.2.0', 'http://127.0.0.1:1/chiuso'), null, 'senza rete: nessun avviso');
+});
+
+test('più lingue: ogni uscita nella sua lingua, traduce solo ciò che va in onda', async () => {
+  ctx = await setup();
+  ctx.cmd({ cmd: 'languages', spoken: ['it', 'en', 'es', 'xx'], targets: ['es', 'en'] });
+  ctx.cmd({ cmd: 'target', out: 'stream', lang: 'es' });
+  ctx.cmd({ cmd: 'target', out: 'room', lang: 'de' }); // non tra le destinazioni: ignorata
+  const state = await waitFor(() => [...ctx.messages].reverse().find((m) => m.t === 'state' && m.outputs.stream.target === 'es'), 3000, 'stato');
+  assert.deepEqual(state.languages, { spoken: ['it', 'en', 'es'], targets: ['es', 'en'] });
+  assert.equal(state.outputs.room.target, 'en');
+
+  ctx.startAudio();
+  await waitFor(() => ctx.events.filter((e) => e.t === 'translation').length >= 3, 15000, 'tre traduzioni');
+  ctx.stopAudio();
+  const url = new URL(ctx.mock.stats.connectUrls[0], 'http://x');
+  assert.deepEqual(JSON.parse(url.searchParams.get('language_codes')), ['it', 'en', 'es']);
+  // L'uscita Streaming riceve solo lo spagnolo, qualunque lingua si parli.
+  assert.ok(ctx.events.filter((e) => e.t === 'translation').every((e) => e.lang === 'es' && e.text.startsWith('[ES]')));
+  // Sala in inglese: chi parla inglese viene tradotto nella prima altra lingua, lo spagnolo.
+  const targets = new Set(ctx.mock.stats.translateBodies.map((b) => b.target_lang));
+  assert.deepEqual([...targets].sort(), ['EN-GB', 'ES']);
+  assert.ok(!ctx.mock.stats.translateBodies.some((b) => b.target_lang === 'IT'), 'nessuna lingua fuori onda');
+
+  await sleep(500);
+  const dir = path.join(ctx.tmp, 'output', fs.readdirSync(path.join(ctx.tmp, 'output'))[0]);
+  const files = fs.readdirSync(dir);
+  for (const f of ['originale.srt', 'spagnolo.srt', 'inglese.srt', 'italiano.srt']) assert.ok(files.includes(f), `manca ${f}`);
+  assert.match(fs.readFileSync(path.join(dir, 'spagnolo.srt'), 'utf8'), /^1\n.*\n\[ES\] w0/m);
+  assert.match(fs.readFileSync(path.join(dir, 'trascrizione.txt'), 'utf8'), /  ES: \[ES\] w0/);
+});
+
+test('sottotitoli nativi: OBS con password riceve il testo nella lingua scelta', async () => {
+  const captions = [];
+  let password = 'segreta';
+  const obsServer = new WebSocketServer({ port: 0, host: '127.0.0.1' });
+  await new Promise((r) => obsServer.once('listening', r));
+  obsServer.on('connection', (ws) => {
+    ws.send(JSON.stringify({ op: 0, d: { rpcVersion: 1, authentication: { challenge: 'sfida', salt: 'sale' } } }));
+    ws.on('message', (raw) => {
+      const m = JSON.parse(raw.toString());
+      if (m.op === 1) {
+        if (m.d.authentication !== obsAuth(password, 'sale', 'sfida')) { ws.close(4009, 'Authentication failed'); return; }
+        ws.send(JSON.stringify({ op: 2, d: { negotiatedRpcVersion: 1 } }));
+      } else if (m.op === 6) {
+        if (m.d.requestType === 'SendStreamCaption') captions.push(m.d.requestData.captionText);
+        const responseData = m.d.requestType === 'GetStreamStatus' ? { outputActive: true } : undefined;
+        ws.send(JSON.stringify({ op: 7, d: { requestType: m.d.requestType, requestId: m.d.requestId, requestStatus: { result: true, code: 100 }, responseData } }));
+      }
+    });
+  });
+  try {
+    ctx = await setup();
+    const obsPort = obsServer.address().port;
+    ctx.cmd({ cmd: 'captionsTarget', lang: 'en' });
+    ctx.cmd({ cmd: 'settingsSave', obsEnabled: true, obsHost: '127.0.0.1', obsPort, obsPassword: 'segreta' });
+    await waitFor(() => ctx.statuses.at(-1)?.obs.state === 'connected' && ctx.statuses.at(-1).obs.streaming, 8000, 'OBS collegato e in diretta');
+
+    ctx.startAudio();
+    await waitFor(() => captions.length >= 2, 15000, 'due sottotitoli');
+    ctx.stopAudio();
+    // Frase italiana: in inglese. Frase inglese: l'originale, perché è già nella lingua scelta.
+    assert.match(captions[0], /^\[EN-GB\] w0/);
+    assert.ok(captions.every((c) => c.length <= 64), 'al massimo due righe CEA-608 per volta');
+    await waitFor(() => captions.some((c) => /^w6/.test(c)), 10000, 'frase inglese come originale');
+    assert.ok(!JSON.stringify(ctx.messages).includes('segreta'), 'password mai rimandata');
+
+    password = 'cambiata';
+    ctx.cmd({ cmd: 'settingsSave', obsPort: obsPort + 0, obsPassword: 'sbagliata' });
+    await waitFor(() => ctx.statuses.at(-1)?.obs.lastError === 'Password di OBS rifiutata', 8000, 'password rifiutata');
+  } finally {
+    obsServer.close();
+  }
+});
+
+test('sottotitoli nativi: pezzi di due righe senza parole spezzate', () => {
+  const chunks = captionChunks('Buongiorno a tutti e benvenuti alla prima sessione della giornata, che oggi parla di sottotitoli in diretta.');
+  assert.ok(chunks.length >= 2);
+  assert.ok(chunks.every((c) => c.length <= 64));
+  assert.equal(chunks.join(' '), 'Buongiorno a tutti e benvenuti alla prima sessione della giornata, che oggi parla di sottotitoli in diretta.');
 });

@@ -60,9 +60,18 @@
       <h2>Lingua parlata</h2>
       <div class="segmented large" id="modes">
         <button data-mode="AUTO">AUTO</button>
-        <button data-mode="IT">IT</button>
-        <button data-mode="EN">EN</button>
       </div>
+      <details class="event-languages">
+        <summary>Lingue dell'evento</summary>
+        <div class="disclosure-body">
+          <h3>Chi parla può usare</h3>
+          <p class="note">AUTO riconosce la lingua solo tra queste. Al massimo 6.</p>
+          <div class="chips" id="spokenChips"></div>
+          <h3>Traduci in</h3>
+          <p class="note">Ogni uscita sceglie una di queste lingue. Se si parla già quella lingua, si traduce nella prima delle altre. Al massimo 8.</p>
+          <div class="chips" id="targetChips"></div>
+        </div>
+      </details>
     </section>
 
     <section class="outputs">
@@ -75,6 +84,7 @@
           <button data-view="original">Solo orig.</button>
         </div>
         <div class="row">
+          <label class="grow">Traduci in <select data-target></select></label>
           <button data-act="clear">Pulisci</button>
           <button data-act="hidden">Nascondi</button>
         </div>
@@ -88,9 +98,18 @@
           <button data-view="original">Solo orig.</button>
         </div>
         <div class="row">
+          <label class="grow">Traduci in <select data-target></select></label>
           <button data-act="clear">Pulisci</button>
           <button data-act="hidden">Nascondi</button>
         </div>
+      </div>
+    </section>
+
+    <section class="card captions">
+      <h2>Sottotitoli nella diretta</h2>
+      <p class="note" id="captionsNote">Disattivati: si attivano nelle Impostazioni.</p>
+      <div class="row">
+        <label class="grow">Lingua dei sottotitoli <select id="captionsTarget"></select></label>
       </div>
     </section>
 
@@ -166,7 +185,7 @@
     <section class="card shortcuts">
       <h2>Scorciatoie</h2>
       <dl>
-        <dt><kbd>A</kbd><kbd>I</kbd><kbd>E</kbd></dt><dd>Lingua AUTO, IT, EN</dd>
+        <dt><kbd>A</kbd><kbd>L</kbd></dt><dd>Lingua: AUTO, lingua successiva</dd>
         <dt><kbd>Spazio</kbd></dt><dd>Avvia, pausa, riprendi</dd>
         <dt><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></dt><dd>Streaming: entrambe, trad., orig.</dd>
         <dt><kbd>7</kbd><kbd>8</kbd><kbd>9</kbd></dt><dd>Sala: entrambe, trad., orig.</dd>

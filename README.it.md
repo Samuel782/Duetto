@@ -2,11 +2,11 @@
 
 [English](README.md) · **Italiano**
 
-**Sottotitoli in diretta, in italiano e in inglese, per eventi, conferenze e dirette streaming.**
+**Sottotitoli in diretta e in più lingue per eventi, conferenze e dirette streaming.**
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/E1X62AXF4L)
 
-Duetto ascolta chi parla, trascrive in tempo reale e traduce ogni frase nell'altra lingua. I sottotitoli compaiono in due posti insieme, ognuno con il suo aspetto: sopra la diretta in OBS Studio e sul maxischermo in sala.
+Duetto ascolta chi parla, trascrive in tempo reale e traduce ogni frase. I sottotitoli compaiono in due posti insieme, ognuno con il suo aspetto e la sua lingua: sopra la diretta in OBS Studio e sul maxischermo in sala. Può anche mandarli a OBS come sottotitoli veri, che su YouTube e Twitch chi guarda accende e spegne.
 
 Niente stenotipisti, niente cabina per gli interpreti, niente codice: basta un portatile e il segnale audio del mixer.
 
@@ -14,11 +14,13 @@ Niente stenotipisti, niente cabina per gli interpreti, niente codice: basta un p
 
 ## In breve
 
-- **Italiano ↔ inglese, in tutte e due le direzioni.** La lingua viene riconosciuta frase per frase, anche quando chi parla cambia senza preavviso.
+- **Tante lingue, in ogni direzione.** Scegli fino a 6 lingue in cui si può parlare e fino a 8 in cui tradurre, tra 19 lingue parlate e 30 scritte. La lingua parlata viene riconosciuta frase per frase, anche quando chi parla cambia senza preavviso; italiano ↔ inglese funziona già così com'è.
+- **Ogni uscita nella sua lingua.** Per esempio inglese sulla diretta e spagnolo sul maxischermo: si traducono solo le lingue in onda.
+- **Sottotitoli veri nella diretta.** Attraverso il server WebSocket di OBS, su YouTube e Twitch chi guarda li accende e li spegne.
 - **Due uscite indipendenti.** Una trasparente per OBS e una ad alto contrasto per il maxischermo, ognuna con il suo stile e i suoi comandi.
 - **Stile tutto personalizzabile.** Caratteri, dimensioni, colori, contorno, sfondo e posizione, separati per originale e traduzione, salvabili come preset.
 - **Fatto per reggere ore di diretta.** Se cade la rete si ricollega da solo senza perdere parole, e il pubblico non vede mai un errore.
-- **File dei sottotitoli inclusi.** File SRT in ogni lingua e la trascrizione completa, scritti di continuo durante l'evento.
+- **File dei sottotitoli inclusi.** Un file SRT per ogni lingua in onda e la trascrizione completa, scritti di continuo durante l'evento.
 - **Si guida dalla tastiera.** Avvio, pausa, lingua e uscite hanno ognuno un tasto.
 
 | Streaming (trasparente sul video) | Maxischermo in sala |

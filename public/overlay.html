@@ -15,14 +15,14 @@
   }
   #box { display: flex; flex-direction: column; border-radius: 8px; transition-property: opacity; }
   #box.empty { visibility: hidden; }
-  .block { white-space: pre; }
+  .block { white-space: pre; unicode-bidi: plaintext; }
 </style>
 </head>
 <body>
 <div id="stage">
   <div id="box">
-    <div class="block" id="original"></div>
-    <div class="block" id="translation"></div>
+    <div class="block" id="original" dir="auto"></div>
+    <div class="block" id="translation" dir="auto"></div>
   </div>
 </div>
 <script src="/overlay.js"></script>

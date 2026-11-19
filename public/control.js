@@ -12,6 +12,9 @@ let appState = null;
 let schema = null;
 let lastStatus = null;
 let activeTab = 'stream';
+let catalog = []; // lingue disponibili: { code, name, spoken, latin }
+let limits = { spoken: 6, targets: 8 };
+const langName = (code) => catalog.find((l) => l.code === code)?.name || code?.toUpperCase() || '—';
 
 const safeStore = {
   get(key) { try { return localStorage.getItem(key); } catch { return null; } },
@@ -32,7 +35,10 @@ function connect() {
     const m = JSON.parse(e.data);
     if (m.t === 'schema') {
       schema = m.styleSchema;
+      catalog = m.languages || [];
+      limits = m.limits || limits;
       buildStylePanel();
+      if (appState) renderState();
       renderLinks(m.links);
       $('openFolder').hidden = !m.desktopApp;
     }
@@ -254,7 +260,30 @@ document.querySelectorAll('.output').forEach((card) => {
     if (view) send({ cmd: 'view', out, view });
     if (act) send({ cmd: act, out });
   });
+  const select = card.querySelector('[data-target]');
+  select.addEventListener('change', () => { send({ cmd: 'target', out, lang: select.value }); select.blur(); });
 });
+
+$('captionsTarget').addEventListener('change', () => {
+  send({ cmd: 'captionsTarget', lang: $('captionsTarget').value });
+  $('captionsTarget').blur();
+});
+
+// Lingue dell'evento: un clic aggiunge in fondo o toglie. Ne resta sempre almeno una.
+function toggleLanguage(kind, code) {
+  const list = [...appState.languages[kind]];
+  const at = list.indexOf(code);
+  if (at >= 0) { if (list.length > 1) list.splice(at, 1); } else if (list.length < limits[kind]) list.push(code);
+  send({ cmd: 'languages', [kind]: list });
+}
+$('spokenChips').addEventListener('click', (e) => { const code = e.target.closest('button')?.dataset.code; if (code) toggleLanguage('spoken', code); });
+$('targetChips').addEventListener('click', (e) => { const code = e.target.closest('button')?.dataset.code; if (code) toggleLanguage('targets', code); });
+
+// Lingua successiva tra quelle dell'evento, dopo AUTO.
+function nextMode() {
+  const modes = ['AUTO', ...appState.languages.spoken];
+  return modes[(modes.indexOf(appState.languageMode) + 1) % modes.length];
+}
 
 // I pulsanti non restano a fuoco: Spazio non deve ripetere l'ultimo clic.
 document.addEventListener('click', (e) => { if (e.target.closest('button')) e.target.closest('button').blur(); });
@@ -267,8 +296,9 @@ const isTyping = (el) => el && (el.tagName === 'TEXTAREA' || el.tagName === 'SEL
 document.addEventListener('keydown', (e) => {
   if (e.metaKey || e.ctrlKey || e.altKey || e.repeat || isTyping(e.target)) return;
   const key = e.key.toLowerCase();
-  const map = { a: 'AUTO', i: 'IT', e: 'EN' };
-  if (map[key]) send({ cmd: 'language', mode: map[key] });
+  const map = { a: 'AUTO', i: 'it', e: 'en' };
+  if (key === 'a' || ((key === 'i' || key === 'e') && appState?.languages.spoken.includes(map[key]))) send({ cmd: 'language', mode: map[key] });
+  else if (key === 'l' && appState) send({ cmd: 'language', mode: nextMode() });
   else if (VIEW_KEYS[key]) send({ cmd: 'view', out: VIEW_KEYS[key][0], view: VIEW_KEYS[key][1] });
   else if (ALL_VIEW_KEYS[key]) send({ cmd: 'viewAll', view: ALL_VIEW_KEYS[key] });
   else if (key === 'q') send({ cmd: 'clear', out: 'stream' });
@@ -282,8 +312,66 @@ document.addEventListener('keydown', (e) => {
 
 // --- Stato ---
 
+// Riempie un menu solo se le voci sono cambiate: non chiude un menu aperto a ogni aggiornamento.
+function fillSelect(select, options, value) {
+  const key = JSON.stringify(options);
+  if (select.dataset.options !== key) {
+    select.replaceChildren(...options.map(([v, text]) => new Option(text, v)));
+    select.dataset.options = key;
+  }
+  if (document.activeElement !== select) select.value = value;
+}
+
+function renderLanguages() {
+  const { spoken, targets } = appState.languages;
+  // Pulsanti della lingua parlata: AUTO e una per ogni lingua dell'evento.
+  const modes = $('modes');
+  const wanted = ['AUTO', ...spoken].join();
+  if (modes.dataset.modes !== wanted) {
+    modes.querySelectorAll('button').forEach((b) => b.remove());
+    for (const mode of ['AUTO', ...spoken]) {
+      const b = document.createElement('button');
+      b.dataset.mode = mode;
+      b.textContent = mode === 'AUTO' ? 'AUTO' : mode.toUpperCase();
+      if (mode !== 'AUTO') b.title = langName(mode);
+      modes.appendChild(b);
+    }
+    modes.dataset.modes = wanted;
+  }
+  modes.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.mode === appState.languageMode));
+
+  const chips = (root, kind, list) => {
+    const available = catalog.filter((l) => kind === 'targets' || l.spoken);
+    root.replaceChildren(...available.map((l) => {
+      const b = document.createElement('button');
+      b.dataset.code = l.code;
+      b.setAttribute('aria-pressed', String(list.includes(l.code)));
+      b.textContent = l.name;
+      // Per le destinazioni conta l'ordine: la prima fa da riserva.
+      if (kind === 'targets' && list.length > 1 && list.includes(l.code)) {
+        const order = document.createElement('span');
+        order.className = 'order';
+        order.textContent = list.indexOf(l.code) + 1;
+        b.appendChild(order);
+      }
+      return b;
+    }));
+  };
+  chips($('spokenChips'), 'spoken', spoken);
+  chips($('targetChips'), 'targets', targets);
+
+  const targetOptions = targets.map((code) => [code, langName(code)]);
+  for (const out of OUTPUTS) {
+    fillSelect(document.querySelector(`.output[data-out="${out}"] [data-target]`), targetOptions, appState.outputs[out].target);
+  }
+  // I sottotitoli CEA-608 mostrano solo l'alfabeto latino.
+  const captionOptions = [['original', t('Originale (lingua di chi parla)')],
+    ...targets.filter((code) => catalog.find((l) => l.code === code)?.latin !== false).map((code) => [code, langName(code)])];
+  fillSelect($('captionsTarget'), captionOptions, appState.captionsTarget);
+}
+
 function renderState() {
-  document.querySelectorAll('#modes button').forEach((b) => b.classList.toggle('on', b.dataset.mode === appState.languageMode));
+  renderLanguages();
   for (const out of OUTPUTS) {
     const profile = appState.outputs[out];
     const card = document.querySelector(`.output[data-out="${out}"]`);
@@ -302,7 +390,6 @@ const AAI_LABELS = {
   idle: [t('Ferma'), ''], connecting: [t('Connessione…'), 'st-warn'],
   reconnecting: [t('Riconnessione…'), 'st-bad'], connected: [t('Connessa'), 'st-ok'],
 };
-const LANG_LABELS = { it: t('Italiano'), en: t('Inglese') };
 const VIEW_LABELS = { both: t('Orig. + trad.'), translation: t('Solo trad.'), original: t('Solo orig.') };
 const fmtHours = (sec) => `${Math.floor(sec / 3600)} h ${String(Math.floor(sec / 60) % 60).padStart(2, '0')} min`;
 const fmtNum = (n) => (n == null ? '—' : n.toLocaleString(I18N.locale));
@@ -327,11 +414,11 @@ function renderStatus() {
     if (aai.bufferedMs > 300) add(t('Buffer audio'), `${(aai.bufferedMs / 1000).toFixed(1)} s`, 'st-warn');
     if (!aai.configured) add(t('Chiave'), t('AssemblyAI mancante: apri Impostazioni'), 'st-bad');
     if (aai.lastError) add(t('Ultimo errore'), aai.lastError, 'st-bad');
-    add(t('Lingua rilevata'), LANG_LABELS[lastStatus.lastLanguage] || '—');
+    add(t('Lingua rilevata'), lastStatus.lastLanguage ? langName(lastStatus.lastLanguage) : '—');
     if (appState) {
-      add(t('Modalità'), appState.languageMode);
-      add(t('Streaming'), t('{view} · finestre: {n}', { view: VIEW_LABELS[appState.outputs.stream.view], n: lastStatus.overlays.stream }));
-      add(t('Sala'), t('{view} · finestre: {n}', { view: VIEW_LABELS[appState.outputs.room.view], n: lastStatus.overlays.room }));
+      add(t('Modalità'), appState.languageMode === 'AUTO' ? 'AUTO' : langName(appState.languageMode));
+      add(t('Streaming'), t('{view} {lang} · finestre: {n}', { view: VIEW_LABELS[appState.outputs.stream.view], lang: appState.outputs.stream.target.toUpperCase(), n: lastStatus.overlays.stream }));
+      add(t('Sala'), t('{view} {lang} · finestre: {n}', { view: VIEW_LABELS[appState.outputs.room.view], lang: appState.outputs.room.target.toUpperCase(), n: lastStatus.overlays.room }));
     }
     add(t('Latenza trad.'), deepl.avgMs ? `${deepl.avgMs} ms` : '—');
     add(t('DeepL usati'), fmtNum(deepl.used));
@@ -339,6 +426,9 @@ function renderStatus() {
     if (!deepl.configured) add(t('Chiave'), t('DeepL mancante: apri Impostazioni'), 'st-bad');
     if (deepl.lastError) add(t('Errore DeepL'), deepl.lastError, 'st-bad');
     add(t('Glossario'), deepl.glossary);
+    const obs = lastStatus.obs;
+    if (obs?.enabled) add(t('Sottotitoli OBS'), obsText(obs), obs.state === 'connected' && obs.streaming ? 'st-ok' : 'st-warn');
+    renderCaptions(obs);
     add(t('Ore di sessione'), fmtHours(aai.billedSeconds));
     add(t('Crediti stimati'), `$${aai.estimatedCost.toFixed(2)}`);
     if (lastStatus.outputDir) add(t('File'), lastStatus.outputDir);
@@ -364,6 +454,18 @@ function renderStatus() {
   $('banner').textContent = banner;
   $('banner').className = bannerWarn ? 'warn' : '';
   renderSupport();
+}
+
+function obsText(obs) {
+  if (obs.state === 'connected') return obs.streaming ? t('In diretta, {n} inviati', { n: obs.sent }) : t('Collegato, OBS non è in diretta');
+  return obs.lastError || t('Collegamento…');
+}
+
+function renderCaptions(obs) {
+  const note = $('captionsNote');
+  if (!obs?.enabled) note.textContent = t('Disattivati: si attivano nelle Impostazioni.');
+  else note.textContent = `OBS: ${obsText(obs)}`;
+  note.className = `note ${obs?.enabled && !(obs.state === 'connected' && obs.streaming) ? 'warn' : ''}`;
 }
 
 // --- Invito a sostenere Duetto ---

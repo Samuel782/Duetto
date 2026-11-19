@@ -1,14 +1,14 @@
 // Traduzione con DeepL: timeout di 3 s, un solo nuovo tentativo, poi si prosegue senza traduzione.
 import { locale, t } from './i18n.js';
 import fs from 'node:fs';
+import { codeFromDetected, language } from './languages.js';
 import { log, warn } from './log.js';
 
 const TIMEOUT_MS = 3000;
 const MAX_IN_FLIGHT = 6; // coda limitata: se DeepL è bloccato non si accumula nulla
 const USAGE_EVERY_MS = 60000;
 const GLOSSARY_NAME = 'duetto';
-const TARGET = { it: 'EN-GB', en: 'IT' };
-const SOURCE = { it: 'IT', en: 'EN' };
+const GLOSSARY_PAIRS = new Set(['it>en', 'en>it']);
 
 // Le chiavi dei piani gratuiti finiscono con ":fx" e usano un indirizzo diverso.
 const endpointForKey = (key) => ((key || '').endsWith(':fx') ? 'https://api-free.deepl.com' : 'https://api.deepl.com');
@@ -79,10 +79,14 @@ export class DeepL {
     return { Authorization: `DeepL-Auth-Key ${this.cfg.apiKey}`, 'Content-Type': 'application/json' };
   }
 
-  // Restituisce { text, lang }, oppure null: chi chiama continua con il solo originale.
-  // Con detect, la lingua indicata è solo un'ipotesi e DeepL rileva quella vera.
-  async translate(text, sourceLang, context, detect = false) {
+  // Traduce una frase in una o più lingue. targetsFor(lingua) dice in quali, perché dipende dalla
+  // lingua di partenza, che con detect è solo un'ipotesi: DeepL rileva quella vera alla prima
+  // richiesta, e solo se l'ipotesi era sbagliata serve ripetere. accept limita le lingue
+  // rilevabili a quelle dell'evento: una frase in una terza lingua resta nella lingua ipotizzata.
+  // Restituisce { lang, translations: { codice: testo } }, oppure null se nessuna traduzione è riuscita.
+  async translate(text, { lang, targetsFor, context = '', detect = false, accept = [] }) {
     if (!this.cfg.apiKey || this.quotaExhausted) return null;
+    if (!targetsFor(lang).length && !detect) return { lang, translations: {} };
     if (this.inFlight >= MAX_IN_FLIGHT) {
       this.lastError = t('Troppe traduzioni in coda');
       return null;
@@ -90,33 +94,39 @@ export class DeepL {
     this.inFlight += 1;
     const started = Date.now();
     try {
-      let lang = sourceLang;
-      let result = await this._withRetry(text, lang, context, detect);
-      if (result && detect) {
-        const found = (result.detected || '').slice(0, 2).toLowerCase();
-        if (found !== lang) {
-          // Ipotesi sbagliata: la destinazione era errata e serve una seconda richiesta.
-          // Se DeepL rileva una terza lingua vale l'ultima lingua valida, cioè l'ipotesi.
-          if (found === 'it' || found === 'en') lang = found;
-          result = await this._withRetry(text, lang, '', false);
+      let source = lang;
+      const translations = {};
+      const first = targetsFor(source)[0];
+      if (detect && first) {
+        const result = await this._withRetry(text, source, first, context, true);
+        if (!result) {
+          warn(`DeepL: ${this.lastError}`);
+          return null;
         }
+        const found = codeFromDetected(result.detected);
+        if (found && found !== source && accept.includes(found)) source = found;
+        // La prima traduzione vale se la lingua rilevata è quella usata per sceglierne la destinazione.
+        if (found === source && targetsFor(source).includes(first)) translations[first] = result.text;
       }
-      if (!result) {
+      const rest = targetsFor(source).filter((code) => !(code in translations));
+      const results = await Promise.all(rest.map((code) => this._withRetry(text, source, code, source === lang ? context : '', false)));
+      rest.forEach((code, i) => { if (results[i]) translations[code] = results[i].text; });
+      if (rest.length && !Object.keys(translations).length) {
         warn(`DeepL: ${this.lastError}`);
         return null;
       }
       const ms = Date.now() - started;
       this.avgMs = this.avgMs ? Math.round(this.avgMs * 0.9 + ms * 0.1) : ms;
       this.lastError = '';
-      return { text: result.text, lang };
+      return { lang: source, translations };
     } finally {
       this.inFlight -= 1;
     }
   }
 
-  async _withRetry(text, sourceLang, context, detect) {
+  async _withRetry(text, source, target, context, detect) {
     for (let attempt = 0; attempt < 2; attempt++) {
-      const result = await this._request(text, sourceLang, context, detect);
+      const result = await this._request(text, source, target, context, detect);
       if (result.text !== undefined) return result;
       this.lastError = result.error;
       if (!result.retry) break;
@@ -124,12 +134,13 @@ export class DeepL {
     return null;
   }
 
-  async _request(text, sourceLang, context, detect) {
-    const body = { text: [text], target_lang: TARGET[sourceLang] };
-    if (!detect) body.source_lang = SOURCE[sourceLang];
+  async _request(text, source, target, context, detect) {
+    const body = { text: [text], target_lang: language(target).target };
+    if (!detect) body.source_lang = language(source).source;
     if (context && this.cfg.useContext) body.context = context;
     if (this.modelType) body.model_type = this.modelType;
-    if (this.glossaryId) body.glossary_id = this.glossaryId;
+    // Il glossario ha solo italiano e inglese: con le altre coppie DeepL rifiuterebbe la richiesta.
+    if (this.glossaryId && GLOSSARY_PAIRS.has(`${detect ? '' : source}>${target}`)) body.glossary_id = this.glossaryId;
     try {
       const res = await fetch(`${this.base}/v2/translate`, {
         method: 'POST',

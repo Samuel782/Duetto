@@ -2,11 +2,31 @@
 // da cui la pagina di controllo genera il pannello e con cui il server valida ogni valore.
 import fs from 'node:fs';
 import path from 'node:path';
+import {
+  MAX_SPOKEN, MAX_TARGETS, cleanCodes, isSpoken, isTarget,
+} from './languages.js';
 import { warn } from './log.js';
 
 export const OUTPUTS = ['stream', 'room'];
 export const VIEWS = ['both', 'translation', 'original'];
-export const LANGUAGE_MODES = ['AUTO', 'IT', 'EN'];
+// Modalità della lingua parlata: AUTO riconosce tra le lingue dell'evento, oppure una lingua fissa.
+// Fino alla 1.1 i valori erano AUTO, IT ed EN: si leggono ancora.
+export function normalizeMode(mode, spoken) {
+  const value = String(mode || '').trim();
+  if (value.toUpperCase() === 'AUTO') return 'AUTO';
+  const code = value.toLowerCase();
+  return spoken.includes(code) ? code : '';
+}
+
+const DEFAULT_SPOKEN = ['it', 'en'];
+const DEFAULT_TARGETS = ['en', 'it'];
+
+// Lingue dell'evento: in quali si può parlare e in quali si traduce. Mai vuote.
+export function sanitizeLanguages(input = {}) {
+  const spoken = cleanCodes(input.spoken, isSpoken, MAX_SPOKEN);
+  const targets = cleanCodes(input.targets, isTarget, MAX_TARGETS);
+  return { spoken: spoken.length ? spoken : [...DEFAULT_SPOKEN], targets: targets.length ? targets : [...DEFAULT_TARGETS] };
+}
 
 const num = (key, label, min, max, step = 1) => ({ key, label, type: 'number', min, max, step });
 const color = (key, label) => ({ key, label, type: 'color' });
@@ -141,13 +161,19 @@ export class Store {
     this.file = file;
     this.timer = null;
     const data = this._read();
-    const envMode = LANGUAGE_MODES.includes(envLanguageMode) ? envLanguageMode : 'AUTO';
+    const languages = sanitizeLanguages(data.languages);
+    const envMode = normalizeMode(envLanguageMode, languages.spoken) || 'AUTO';
     // Dopo un riavvio vale l'ultima modalità, salvo che il valore in .env sia stato cambiato.
-    const keepSaved = data.envLanguageMode === envMode && LANGUAGE_MODES.includes(data.languageMode);
+    const savedMode = normalizeMode(data.languageMode, languages.spoken);
+    const keepSaved = String(data.envLanguageMode || '').toUpperCase() === envMode.toUpperCase() && savedMode;
     this.state = {
       envLanguageMode: envMode,
-      languageMode: keepSaved ? data.languageMode : envMode,
-      lastLanguage: ['it', 'en'].includes(data.lastLanguage) ? data.lastLanguage : null,
+      languageMode: keepSaved ? savedMode : envMode,
+      languages,
+      lastLanguage: languages.spoken.includes(data.lastLanguage) ? data.lastLanguage : null,
+      // Lingua dei sottotitoli nativi della diretta: una lingua di destinazione, oppure l'originale.
+      captionsTarget: data.captionsTarget === 'original' || languages.targets.includes(data.captionsTarget)
+        ? data.captionsTarget : languages.targets[0],
       presets: sanitizePresets(data.presets),
       outputs: {},
     };
@@ -156,6 +182,8 @@ export class Store {
       this.state.outputs[out] = {
         view: VIEWS.includes(saved.view) ? saved.view : 'both',
         hidden: saved.hidden === true,
+        // In quale lingua tradurre per questa uscita.
+        target: languages.targets.includes(saved.target) ? saved.target : languages.targets[0],
         style: { ...DEFAULT_STYLES[out], ...sanitizeSavedStyle(saved.style) },
       };
     }

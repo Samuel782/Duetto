@@ -63,6 +63,19 @@
   </section>
 
   <section class="card">
+    <h2>Sottotitoli nella diretta (OBS)</h2>
+    <p class="note">Duetto manda il testo a OBS, che lo inserisce nello streaming come sottotitoli veri: su YouTube e Twitch chi guarda li accende e li spegne. In OBS apri Strumenti → Impostazioni server WebSocket, attiva il server e copia qui porta e password. Su YouTube attiva i sottotitoli incorporati (608/708) nelle impostazioni della diretta.</p>
+    <label class="check"><input id="obsEnabled" type="checkbox"> Manda i sottotitoli a OBS</label>
+    <div class="fields-inline">
+      <label class="field">Indirizzo <input id="obsHost" type="text" spellcheck="false" autocomplete="off"></label>
+      <label class="field">Porta <input id="obsPort" type="number" min="1" max="65535"></label>
+    </div>
+    <label class="field">Password del server WebSocket
+      <input id="obsPassword" type="password" autocomplete="off" spellcheck="false">
+    </label>
+  </section>
+
+  <section class="card">
     <h2>Aggiornamenti</h2>
     <label class="check"><input id="checkUpdates" type="checkbox"> All'avvio controlla su GitHub se c'è una nuova versione</label>
     <p class="note">Solo un avviso nella regia, con il link per scaricarla. Non installa nulla da solo.</p>

@@ -17,7 +17,6 @@ const HANDOFF_FORCE_MS = 15000; // poi chiude il turno in corso con ForceEndpoin
 const HANDOFF_MAX_MS = 20000; // e infine passa comunque
 const DEFAULT_SESSION_MS = 3 * 3600 * 1000;
 
-const LANGUAGE_CODES = { AUTO: ['it', 'en'], IT: ['it'], EN: ['en'] };
 
 // Verifica una chiave aprendo e chiudendo subito una sessione: il costo è di pochi secondi.
 export function testAssemblyKey({ url, model, apiKey }) {
@@ -57,6 +56,7 @@ export class AssemblyLink extends EventEmitter {
     super();
     this.cfg = cfg;
     this.mode = 'AUTO';
+    this.spoken = ['it', 'en']; // lingue dell'evento: AUTO riconosce solo tra queste
     this.keyterms = [];
     this.active = false;
     this.primary = null;
@@ -133,9 +133,15 @@ export class AssemblyLink extends EventEmitter {
     this.primary = this.next = null;
   }
 
-  setMode(mode) {
+  // In AUTO si riconosce tra le lingue dell'evento; con una lingua fissa, solo quella.
+  languageCodes() {
+    return this.mode === 'AUTO' ? this.spoken : [this.mode];
+  }
+
+  setLanguages({ mode = this.mode, spoken = this.spoken }) {
     this.mode = mode;
-    this._updateConfig({ language_codes: LANGUAGE_CODES[mode] });
+    this.spoken = spoken;
+    this._updateConfig({ language_codes: this.languageCodes() });
   }
 
   // Una chiave nuova vale subito: non serve aspettare il prossimo tentativo di riconnessione.
@@ -201,7 +207,7 @@ export class AssemblyLink extends EventEmitter {
       encoding: 'pcm_s16le',
       sample_rate: '16000',
       language_detection: 'true',
-      language_codes: JSON.stringify(LANGUAGE_CODES[this.mode]),
+      language_codes: JSON.stringify(this.languageCodes()),
       session_heartbeat: 'true',
     });
     if (this.cfg.minTurnSilence) params.set('min_turn_silence', this.cfg.minTurnSilence);
@@ -288,7 +294,7 @@ export class AssemblyLink extends EventEmitter {
     }
     if (s.deferredKeyterms) this._send(s, { type: 'UpdateConfiguration', keyterms_prompt: this.keyterms });
     // La modalità può essere cambiata mentre la sessione si stava aprendo.
-    this._send(s, { type: 'UpdateConfiguration', language_codes: LANGUAGE_CODES[this.mode] });
+    this._send(s, { type: 'UpdateConfiguration', language_codes: this.languageCodes() });
     log(`AssemblyAI: sessione ${s.role === 'primary' ? 'attiva' : 'pronta per il cambio'} ${s.id}`);
   }
 

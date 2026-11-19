@@ -7,9 +7,10 @@ import path from 'node:path';
 import { UI_LANGUAGES } from './i18n.js';
 import { warn } from './log.js';
 
-const KEYS = ['assemblyaiApiKey', 'deeplApiKey'];
+const KEYS = ['assemblyaiApiKey', 'deeplApiKey', 'obsPassword']; // segreti: cifrati su disco
 const DEFAULTS = {
   assemblyaiApiKey: '', deeplApiKey: '', assemblyaiRegion: 'auto', uiLanguage: 'auto', checkUpdates: true, cleanFillers: null, cleanProfanity: null,
+  obsEnabled: false, obsHost: '127.0.0.1', obsPort: 4455, obsPassword: '',
 };
 export const REGIONS = ['auto', 'eu'];
 const ENCRYPTED = 'enc:v1:';
@@ -70,11 +71,15 @@ export class Settings {
       // Campo vuoto: la chiave già salvata resta com'è.
       if (typeof change[key] === 'string' && change[key].trim()) this.values[key] = change[key].trim();
     }
-    for (const key of ['cleanFillers', 'cleanProfanity', 'checkUpdates']) {
+    for (const key of ['cleanFillers', 'cleanProfanity', 'checkUpdates', 'obsEnabled']) {
       if (typeof change[key] === 'boolean') this.values[key] = change[key];
     }
     if (REGIONS.includes(change.assemblyaiRegion)) this.values.assemblyaiRegion = change.assemblyaiRegion;
     if (UI_LANGUAGES.includes(change.uiLanguage)) this.values.uiLanguage = change.uiLanguage;
+    // OBS gira sullo stesso computer o in rete locale: basta un nome o un indirizzo semplice.
+    if (typeof change.obsHost === 'string' && /^[\w.-]{1,253}$/.test(change.obsHost.trim())) this.values.obsHost = change.obsHost.trim();
+    const port = Number(change.obsPort);
+    if (Number.isInteger(port) && port > 0 && port < 65536) this.values.obsPort = port;
     return this.save();
   }
 

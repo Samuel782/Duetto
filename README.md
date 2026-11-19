@@ -2,11 +2,11 @@
 
 **English** · [Italiano](README.it.md)
 
-**Live Italian and English subtitles for events, conferences and live streams.**
+**Live multilingual subtitles for events, conferences and live streams.**
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/E1X62AXF4L)
 
-Duetto listens to whoever is speaking, transcribes in real time and translates every sentence into the other language. Subtitles appear in two places at once, each with its own look: over the live stream in OBS Studio and on the big screen in the venue.
+Duetto listens to whoever is speaking, transcribes in real time and translates every sentence. Subtitles appear in two places at once, each with its own look and language: over the live stream in OBS Studio and on the big screen in the venue. It can also send them to OBS as real closed captions, which YouTube and Twitch viewers switch on and off.
 
 No stenographer, no interpreters' booth, no code: one laptop and an audio feed from the mixer.
 
@@ -14,11 +14,13 @@ No stenographer, no interpreters' booth, no code: one laptop and an audio feed f
 
 ## Highlights
 
-- **Italian ↔ English, both ways.** The language is detected sentence by sentence, even when speakers switch without warning.
+- **Many languages, in any direction.** Choose up to 6 languages people may speak and up to 8 to translate into, among 19 spoken and 30 written languages. The spoken language is detected sentence by sentence, even when speakers switch without warning; Italian ↔ English works out of the box.
+- **Each output in its own language.** For example English over the stream and Spanish on the big screen: only the languages on air are translated.
+- **Real captions in the stream.** Through OBS's WebSocket server, viewers on YouTube and Twitch can turn captions on and off.
 - **Two independent outputs.** A transparent overlay for OBS and a high-contrast view for the big screen, each with its own style and controls.
 - **Full control of the style.** Fonts, sizes, colours, outline, background and position, separately for the original and the translation, saved as presets.
 - **Built for hours on air.** It reconnects by itself if the network drops, without losing words, and the audience never sees an error.
-- **Subtitle files included.** SRT files in each language and a full transcript, written continuously during the event.
+- **Subtitle files included.** An SRT file for every language on air and a full transcript, written continuously during the event.
 - **Driven from the keyboard.** Start, pause, language and outputs each have a single-key shortcut.
 
 | Streaming (transparent over video) | Big screen in the venue |

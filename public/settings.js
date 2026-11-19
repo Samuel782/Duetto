@@ -15,6 +15,8 @@ function fill(m) {
   $('deeplKey').value = '';
   $('assemblyaiKey').placeholder = m.assemblyaiKey ? t('Salvata ({key})', { key: m.assemblyaiKey }) : t('Incolla qui la chiave');
   $('deeplKey').placeholder = m.deeplKey ? t('Salvata ({key})', { key: m.deeplKey }) : t('Incolla qui la chiave');
+  $('obsPassword').value = '';
+  $('obsPassword').placeholder = m.obsPassword ? t('Salvata ({key})', { key: m.obsPassword }) : t('Vuota se OBS non la chiede');
   if (loaded) return; // non cancella ciò che si sta modificando se la connessione si ristabilisce
   loaded = true;
   $('keyterms').value = m.keyterms;
@@ -22,6 +24,9 @@ function fill(m) {
   $('cleanFillers').checked = m.cleanFillers;
   $('cleanProfanity').checked = m.cleanProfanity;
   $('checkUpdates').checked = m.checkUpdates;
+  $('obsEnabled').checked = m.obsEnabled;
+  $('obsHost').value = m.obsHost;
+  $('obsPort').value = m.obsPort;
   $('assemblyaiRegion').value = m.assemblyaiRegion;
   $('uiLanguage').value = m.uiLanguage;
   if (m.keysEncrypted) $('keysNote').textContent = t('Servono per trascrivere e tradurre. Restano solo su questo computer, cifrate con il portachiavi del sistema.');
@@ -67,6 +72,10 @@ $('save').onclick = () => {
     cleanFillers: $('cleanFillers').checked,
     cleanProfanity: $('cleanProfanity').checked,
     checkUpdates: $('checkUpdates').checked,
+    obsEnabled: $('obsEnabled').checked,
+    obsHost: $('obsHost').value,
+    obsPort: Number($('obsPort').value),
+    obsPassword: $('obsPassword').value,
     assemblyaiRegion: $('assemblyaiRegion').value,
     uiLanguage: $('uiLanguage').value,
   }));

@@ -13,8 +13,12 @@ import {
 import { log, warn } from './log.js';
 import { Settings, keysEncrypted, maskKey, readTextFile, writeTextFile } from './settings.js';
 import {
-  DEFAULT_STYLES, LANGUAGE_MODES, OUTPUTS, STYLE_SCHEMA, Store, VIEWS, sanitizePresets, sanitizeStyle,
+  DEFAULT_STYLES, OUTPUTS, STYLE_SCHEMA, Store, VIEWS, normalizeMode, sanitizeLanguages, sanitizePresets, sanitizeStyle,
 } from './store.js';
+import {
+  LANGUAGES, MAX_SPOKEN, MAX_TARGETS, codeFromDetected, effectiveTarget,
+} from './languages.js';
+import { ObsCaptions } from './obs.js';
 import { createCleaner } from './textclean.js';
 import { Transcript } from './transcript.js';
 import { checkForUpdate } from './updates.js';
@@ -32,7 +36,6 @@ const flag = (value, fallback) => (value === undefined || value === '' ? fallbac
 const PORT = Number(env.PORT) || 8787;
 const HOST = env.HOST || '0.0.0.0';
 const CONTROL_ALLOW_LAN = flag(env.CONTROL_ALLOW_LAN, false);
-const FALLBACK_LANGUAGE = env.FALLBACK_LANGUAGE === 'en' ? 'en' : 'it';
 const PRICE_PER_HOUR = Number(env.ASSEMBLYAI_PRICE_PER_HOUR) || 0.45;
 const DATA_DIR = env.DATA_DIR || path.join(ROOT, 'data');
 const OUTPUT_DIR = env.OUTPUT_DIR || path.join(ROOT, 'output');
@@ -90,7 +93,15 @@ const link = new AssemblyLink({
   rolloverBeforeMs: (Number(env.SESSION_ROLLOVER_BEFORE_SECONDS) || 120) * 1000,
   sessionMaxMs: (Number(env.SESSION_MAX_SECONDS) || 0) * 1000,
 });
-link.mode = state.languageMode;
+link.setLanguages({ mode: state.languageMode, spoken: state.languages.spoken });
+
+// Sottotitoli nativi della diretta, attraverso OBS.
+const obs = new ObsCaptions();
+const configureObs = () => obs.configure({
+  enabled: !!settings.values.obsEnabled, host: settings.values.obsHost,
+  port: settings.values.obsPort, password: settings.values.obsPassword,
+});
+configureObs();
 
 // --- Termini chiave ---
 
@@ -135,6 +146,34 @@ setInterval(() => {
   for (const name of OUTPUTS) for (const res of sseClients[name]) res.write(': ping\n\n');
 }, 15000);
 
+// --- Lingue ---
+
+const languages = () => state.languages;
+
+// Le lingue in onda per una frase detta in "lang": una per ogni uscita che mostra la traduzione,
+// più quella dei sottotitoli nativi se OBS li sta trasmettendo. Solo queste vengono tradotte.
+function targetsOnAir(lang) {
+  const { targets } = languages();
+  const wanted = new Set();
+  for (const out of OUTPUTS) {
+    const profile = state.outputs[out];
+    if (profile.view === 'original') continue;
+    const code = effectiveTarget(lang, profile.target, targets);
+    if (code) wanted.add(code);
+  }
+  const captions = captionsLanguage(lang);
+  if (captions && captions !== lang) wanted.add(captions);
+  return [...wanted];
+}
+
+// Lingua dei sottotitoli nativi per una frase: '' se non vanno mandati.
+function captionsLanguage(lang) {
+  const status = obs.status();
+  if (status.state !== 'connected' || !status.streaming) return '';
+  // Una sola lingua: se chi parla la usa già, passa l'originale.
+  return state.captionsTarget === 'original' ? lang : state.captionsTarget;
+}
+
 // --- Elaborazione delle frasi ---
 
 let sentenceSeq = 0;
@@ -142,17 +181,14 @@ let previous = { text: '', lang: null }; // contesto per DeepL: non viene tradot
 let writeTail = Promise.resolve(); // mantiene l'ordine delle frasi nei file
 
 const isShortText = (text) => text.trim().split(/\s+/).length <= 2;
-const validDetected = (sentence) => {
-  const detected = sentence.detected.toLowerCase().slice(0, 2);
-  return detected === 'it' || detected === 'en' ? detected : '';
-};
 
 function resolveLanguage(sentence) {
-  if (sentence.mode === 'IT') return 'it';
-  if (sentence.mode === 'EN') return 'en';
-  const detected = validDetected(sentence);
-  if (detected && (!isShortText(sentence.text) || !state.lastLanguage)) return detected;
-  return state.lastLanguage || FALLBACK_LANGUAGE;
+  const { spoken } = languages();
+  if (sentence.mode !== 'AUTO' && spoken.includes(sentence.mode)) return sentence.mode;
+  const detected = codeFromDetected(sentence.detected);
+  const valid = spoken.includes(detected) ? detected : '';
+  if (valid && (!isShortText(sentence.text) || !state.lastLanguage)) return valid;
+  return spoken.includes(state.lastLanguage) ? state.lastLanguage : spoken[0];
 }
 
 function setLastLanguage(lang) {
@@ -166,6 +202,16 @@ link.on('partial', (text, continuation) => {
   broadcast({ t: 'partial', text: clean(text), cont: continuation });
 });
 
+// Ogni uscita riceve la traduzione nella sua lingua. Se non c'è, chi vede solo la traduzione
+// legge l'originale.
+function sendTranslations(id, lang, translations) {
+  for (const out of OUTPUTS) {
+    const code = effectiveTarget(lang, state.outputs[out].target, languages().targets);
+    const text = code && translations[code];
+    broadcast(text ? { t: 'translation', id, text, lang: code } : { t: 'translationFailed', id }, out);
+  }
+}
+
 link.on('final', (sentence) => {
   const text = clean(sentence.text);
   if (!text) {
@@ -177,31 +223,40 @@ link.on('final', (sentence) => {
   // In AUTO la lingua la conferma DeepL, frase per frase: quella di AssemblyAI è solo un'ipotesi, che
   // sbaglia soprattutto ai cambi di lingua. Una seconda richiesta serve solo se l'ipotesi è errata.
   // Una frase di una o due parole non basta a rilevarla e non cambia la lingua corrente.
-  const detect = sentence.mode === 'AUTO' && !isShort;
+  const detect = sentence.mode === 'AUTO' && !isShort && languages().spoken.length > 1;
 
   const id = ++sentenceSeq;
   const endAt = Date.now();
   broadcast({ t: 'final', id, text, lang: guess, cont: !!sentence.continuation });
 
   const context = previous.lang === guess ? previous.text : '';
-  const translated = deepl.translate(text, guess, context, detect).catch(() => null);
+  const translated = deepl.translate(text, {
+    lang: guess, targetsFor: targetsOnAir, context, detect, accept: languages().spoken,
+  }).catch(() => null);
 
   // Le traduzioni arrivano in parallelo ma escono nell'ordine in cui le frasi sono state dette.
   writeTail = writeTail.then(() => translated).then((result) => {
     const lang = result?.lang || guess;
-    const translation = result?.text ? clean(result.text) : '';
-    broadcast(translation ? { t: 'translation', id, text: translation } : { t: 'translationFailed', id });
+    const translations = {};
+    for (const [code, value] of Object.entries(result?.translations || {})) {
+      const cleaned = clean(value);
+      if (cleaned) translations[code] = cleaned;
+    }
+    sendTranslations(id, lang, translations);
+    const captions = captionsLanguage(lang);
+    if (captions) obs.push(captions === lang ? text : translations[captions] || '');
     if (!isShort || !state.lastLanguage || sentence.mode !== 'AUTO') setLastLanguage(lang);
     const sameLanguage = previous.lang === lang;
     previous = { text: `${sameLanguage ? previous.text : ''} ${text}`.trim().slice(-500), lang };
     transcript.addSentence({
-      text, translation, lang, mode: sentence.mode,
+      text, lang, translations, targets: targetsOnAir(lang), mode: sentence.mode,
       startAt: endAt - sentence.durationMs, endAt,
     });
   }).catch((err) => warn('Trascrizione:', err.message));
 });
 
 // --- Modalità demo: testo finto, nessun credito consumato, nessun file scritto ---
+// Le frasi sono in italiano e in inglese: un'uscita impostata su un'altra lingua mostra l'originale.
 
 const DEMO_LINES = [
   ['it', 'Buongiorno a tutti e benvenuti alla prima sessione della giornata.', 'Good morning everyone and welcome to the first session of the day.'],
@@ -228,7 +283,7 @@ function startDemo() {
     const id = ++sentenceSeq;
     broadcast({ t: 'final', id, text, lang });
     demoTimer = setTimeout(() => {
-      broadcast({ t: 'translation', id, text: translation });
+      sendTranslations(id, lang, { [lang === 'it' ? 'en' : 'it']: translation });
       line = (line + 1) % DEMO_LINES.length;
       word = 0;
       demoTimer = setTimeout(step, 1800);
@@ -258,7 +313,10 @@ function sendControl(payload) {
   }
 }
 
-const publicState = () => ({ t: 'state', languageMode: state.languageMode, outputs: state.outputs, presets: state.presets });
+const publicState = () => ({
+  t: 'state', languageMode: state.languageMode, languages: state.languages, captionsTarget: state.captionsTarget,
+  outputs: state.outputs, presets: state.presets,
+});
 
 function statusMessage() {
   const aai = link.status();
@@ -269,6 +327,7 @@ function statusMessage() {
     lastLanguage: state.lastLanguage,
     demo: !!demoTimer,
     update,
+    obs: obs.status(),
     overlays: { stream: sseClients.stream.size, room: sseClients.room.size },
     outputDir: transcript.dir ? path.relative(ROOT, transcript.dir) : '',
   };
@@ -276,12 +335,29 @@ function statusMessage() {
 
 setInterval(() => sendControl(statusMessage()), 1000);
 
-function setLanguageMode(mode) {
-  if (!LANGUAGE_MODES.includes(mode) || mode === state.languageMode) return;
+function setLanguageMode(value) {
+  const mode = normalizeMode(value, state.languages.spoken);
+  if (!mode || mode === state.languageMode) return;
   state.languageMode = mode;
-  link.setMode(mode);
+  link.setLanguages({ mode });
   transcript.note(`Modalità lingua: ${mode}`);
   log(`Modalità lingua: ${mode}`);
+}
+
+// Nuove lingue dell'evento: modalità, uscite e sottotitoli restano su lingue ancora scelte.
+function setLanguages(input) {
+  const next = sanitizeLanguages({ ...state.languages, ...input });
+  state.languages = next;
+  if (state.languageMode !== 'AUTO' && !next.spoken.includes(state.languageMode)) state.languageMode = 'AUTO';
+  if (!next.spoken.includes(state.lastLanguage)) state.lastLanguage = null;
+  for (const out of OUTPUTS) {
+    if (!next.targets.includes(state.outputs[out].target)) setProfile(out, { target: next.targets[0] });
+  }
+  if (state.captionsTarget !== 'original' && !next.targets.includes(state.captionsTarget)) state.captionsTarget = next.targets[0];
+  link.setLanguages({ mode: state.languageMode, spoken: next.spoken });
+  const note = `Lingue: parlate ${next.spoken.join(', ')}; traduzioni ${next.targets.join(', ')}`;
+  transcript.note(note);
+  log(note);
 }
 
 function setProfile(out, change) {
@@ -292,6 +368,11 @@ function setProfile(out, change) {
 
 const commands = {
   language: (m) => setLanguageMode(m.mode),
+  languages: (m) => setLanguages({ spoken: m.spoken, targets: m.targets }),
+  target: (m) => { if (state.languages.targets.includes(m.lang)) setProfile(m.out, { target: m.lang }); },
+  captionsTarget: (m) => {
+    if (m.lang === 'original' || state.languages.targets.includes(m.lang)) state.captionsTarget = m.lang;
+  },
   view: (m) => { if (VIEWS.includes(m.view)) setProfile(m.out, { view: m.view }); },
   viewAll: (m) => { if (VIEWS.includes(m.view)) OUTPUTS.forEach((out) => setProfile(out, { view: m.view })); },
   hidden: (m) => { if (OUTPUTS.includes(m.out)) setProfile(m.out, { hidden: !state.outputs[m.out].hidden }); },
@@ -326,6 +407,10 @@ function settingsMessage() {
     assemblyaiRegion: settings.values.assemblyaiRegion,
     uiLanguage: settings.values.uiLanguage,
     checkUpdates: settings.values.checkUpdates,
+    obsEnabled: settings.values.obsEnabled,
+    obsHost: settings.values.obsHost,
+    obsPort: settings.values.obsPort,
+    obsPassword: settings.values.obsPassword ? maskKey(settings.values.obsPassword) : '',
     keysEncrypted: keysEncrypted(),
     keyterms: readTextFile(KEYTERMS_FILE),
     glossary: readTextFile(GLOSSARY_FILE),
@@ -341,6 +426,7 @@ async function saveSettings(ws, m) {
   if (language() !== before) sendControl({ t: 'language', lang: language() });
   link.setApiKey(assemblyKey());
   link.cfg.url = assemblyUrl(); // vale dalla prossima connessione
+  configureObs();
   if (deeplKey() !== deepl.cfg.apiKey) deepl.setApiKey(deeplKey());
   clean = createCleaner({ fillers: cleanFillers(), profanity: cleanProfanity() });
   try {
@@ -489,6 +575,8 @@ wss.on('connection', (ws) => {
   controlClients.add(ws);
   ws.send(JSON.stringify({
     t: 'schema', styleSchema: STYLE_SCHEMA, defaults: DEFAULT_STYLES,
+    languages: LANGUAGES.map(({ code, name, spoken, latin }) => ({ code, name: t(name), spoken, latin })),
+    limits: { spoken: MAX_SPOKEN, targets: MAX_TARGETS },
     links: overlayLinks(), desktopApp: !!hooks.openFolder, outputDir: OUTPUT_DIR,
   }));
   ws.send(JSON.stringify(publicState()));
@@ -570,6 +658,7 @@ export function shutdown() {
   log('Arresto: chiudo la sessione AssemblyAI');
   link.shutdown(); // Terminate ferma la fatturazione
   deepl.shutdown();
+  obs.stop();
   store.flush();
   stopping = new Promise((resolve) => setTimeout(resolve, 1500));
   return stopping;

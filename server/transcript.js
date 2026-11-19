@@ -1,6 +1,7 @@
 // Scrittura progressiva su disco: ogni frase è aggiunta subito ai file, senza cronologia in memoria.
 import fs from 'node:fs';
 import path from 'node:path';
+import { language } from './languages.js';
 import { warn } from './log.js';
 
 const pad = (n, size = 2) => String(n).padStart(size, '0');
@@ -18,7 +19,7 @@ export class Transcript {
     this.rootDir = rootDir;
     this.dir = null;
     this.t0 = 0;
-    this.counter = 0;
+    this.counters = new Map(); // ogni file SRT numera i suoi sottotitoli
     this.lastEnd = 0;
   }
 
@@ -45,7 +46,15 @@ export class Transcript {
     }
   }
 
-  // entry: { text, translation, lang, mode, startAt, endAt } con orari in millisecondi.
+  _block(file, start, end, text) {
+    const n = (this.counters.get(file) || 0) + 1;
+    this.counters.set(file, n);
+    this._append(file, `${n}\n${srtTime(start)} --> ${srtTime(end)}\n${text}\n\n`);
+  }
+
+  // entry: { text, lang, translations: { codice: testo }, targets: [codici], mode, startAt, endAt },
+  // con orari in millisecondi. targets sono le lingue in onda per questa frase: ognuna ha il suo SRT,
+  // anche quando la traduzione non è arrivata, così i file restano allineati.
   addSentence(entry) {
     try {
       this._ensureDir();
@@ -54,18 +63,17 @@ export class Transcript {
       const start = Math.max(entry.startAt - this.t0, this.lastEnd);
       const end = Math.max(entry.endAt - this.t0, start + 1000);
       this.lastEnd = end;
-      this.counter += 1;
-      const block = (text) => `${this.counter}\n${srtTime(start)} --> ${srtTime(end)}\n${text}\n\n`;
-      const other = entry.translation || entry.text; // senza traduzione resta l'originale
-      const italian = entry.lang === 'it' ? entry.text : other;
-      const english = entry.lang === 'en' ? entry.text : other;
-      this._append('originale.srt', block(entry.text));
-      this._append('italiano.srt', block(italian));
-      this._append('inglese.srt', block(english));
+      this._block('originale.srt', start, end, entry.text);
+      // Il file di una lingua contiene tutto in quella lingua: l'originale se è stato detto così,
+      // altrimenti la traduzione. Senza traduzione resta l'originale.
+      for (const code of new Set([entry.lang, ...entry.targets])) {
+        const file = `${language(code)?.file || code}.srt`;
+        this._block(file, start, end, code === entry.lang ? entry.text : entry.translations[code] || entry.text);
+      }
+      const lines = entry.targets.map((code) => `  ${code.toUpperCase()}: ${entry.translations[code] || '(non disponibile)'}\n`);
       this._append('trascrizione.txt',
         `[${clock(new Date(entry.startAt))}] [${entry.lang.toUpperCase()}] [modalità ${entry.mode}]\n` +
-        `  Originale:  ${entry.text}\n` +
-        `  Traduzione: ${entry.translation || '(non disponibile)'}\n`);
+        `  Originale: ${entry.text}\n${lines.join('')}`);
     } catch (err) {
       warn(`Trascrizione: ${err.message}`);
     }
