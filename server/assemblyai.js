@@ -1,5 +1,6 @@
 // Collegamento ad AssemblyAI Streaming v3: sessione attiva, riconnessione e cambio
 // di sessione prima del limite di 3 ore, senza perdere né duplicare il parlato.
+import { t } from './i18n.js';
 import { EventEmitter } from 'node:events';
 import WebSocket from 'ws';
 import { log, warn } from './log.js';
@@ -21,7 +22,7 @@ const LANGUAGE_CODES = { AUTO: ['it', 'en'], IT: ['it'], EN: ['en'] };
 // Verifica una chiave aprendo e chiudendo subito una sessione: il costo è di pochi secondi.
 export function testAssemblyKey({ url, model, apiKey }) {
   return new Promise((resolve) => {
-    if (!apiKey) { resolve({ ok: false, message: 'Chiave mancante' }); return; }
+    if (!apiKey) { resolve({ ok: false, message: t('Chiave mancante') }); return; }
     let settled = false;
     let errorText = '';
     const params = new URLSearchParams({ speech_model: model, encoding: 'pcm_s16le', sample_rate: '16000' });
@@ -34,20 +35,20 @@ export function testAssemblyKey({ url, model, apiKey }) {
     };
     const timer = setTimeout(() => {
       ws.terminate();
-      finish({ ok: false, message: 'Nessuna risposta: controlla la connessione' });
+      finish({ ok: false, message: t('Nessuna risposta: controlla la connessione') });
     }, 8000);
     ws.on('message', (data) => {
       let m;
       try { m = JSON.parse(data.toString()); } catch { return; }
       if (m.type === 'Begin') {
         ws.send(JSON.stringify({ type: 'Terminate' }));
-        finish({ ok: true, message: 'Chiave valida' });
+        finish({ ok: true, message: t('Chiave valida') });
       } else if (m.type === 'Error') {
         errorText = m.error || '';
       }
     });
     ws.on('error', (err) => { errorText = errorText || err.message; });
-    ws.on('close', () => finish({ ok: false, message: errorText || 'Connessione rifiutata' }));
+    ws.on('close', () => finish({ ok: false, message: errorText || t('Connessione rifiutata') }));
   });
 }
 
@@ -282,7 +283,7 @@ export class AssemblyLink extends EventEmitter {
     // I parametri errati vengono ignorati senza errore: va controllato il modello effettivo.
     const model = m.configuration?.model;
     if (model && model !== this.cfg.model) {
-      this.lastError = `Modello richiesto ${this.cfg.model}, attivo ${model}`;
+      this.lastError = t('Modello richiesto {wanted}, attivo {model}', { wanted: this.cfg.model, model });
       warn(this.lastError);
     }
     if (s.deferredKeyterms) this._send(s, { type: 'UpdateConfiguration', keyterms_prompt: this.keyterms });
@@ -370,7 +371,7 @@ export class AssemblyLink extends EventEmitter {
     // Il codice 1000 è una chiusura normale: il suo motivo ("Session Ended") non è un errore.
     const errorText = s.errorText || (code !== 1000 && reason && !/see error/i.test(reason) ? reason : '');
     if (errorText) this.lastError = errorText;
-    else if (code !== 1000 && this.active) this.lastError = `Connessione chiusa (codice ${code})`;
+    else if (code !== 1000 && this.active) this.lastError = t('Connessione chiusa (codice {code})', { code });
     if (code === 1008 && !/too many/i.test(errorText)) s.fatal = true;
 
     if (s === this.next) {

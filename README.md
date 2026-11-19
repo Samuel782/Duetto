@@ -29,9 +29,9 @@ No stenographer, no interpreters' booth, no code: one laptop and an audio feed f
 
 Duetto runs on a **Mac** or a **Windows** PC. Transcription runs on [AssemblyAI](https://www.assemblyai.com) and translation on [DeepL](https://www.deepl.com/pro-api): you need a key for each, and both offer free credit to start. An hour of speech costs roughly one or two euros.
 
-Download it from the [Releases](https://github.com/Samuel782/Duetto/releases) page, open it and paste the two keys. The app's interface is in Italian.
+Download it from the [Releases](https://github.com/Samuel782/Duetto/releases) page, open it and paste the two keys. The interface is in English or Italian, following your computer's language or your choice in Settings. At startup Duetto tells you when a new version is available.
 
-The keys stay on your computer, and so do the subtitle files. While Duetto is running, audio is sent to AssemblyAI and text to DeepL: let speakers and attendees know if the event requires it.
+The keys stay on your computer, encrypted with the system keychain, and so do the subtitle files. While Duetto is running, audio is sent to AssemblyAI and text to DeepL: let speakers and attendees know if the event requires it. If data must stay in Europe, choose **European Union only** in Settings and AssemblyAI will process the audio on its EU servers.
 
 ## Free for you, paid for work
 

@@ -7,13 +7,17 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { AssemblyLink, testAssemblyKey } from './assemblyai.js';
 import { DeepL } from './deepl.js';
+import {
+  englishDictionary, language, resolveLanguage as resolveUiLanguage, setLanguage, t,
+} from './i18n.js';
 import { log, warn } from './log.js';
-import { Settings, maskKey, readTextFile, writeTextFile } from './settings.js';
+import { Settings, keysEncrypted, maskKey, readTextFile, writeTextFile } from './settings.js';
 import {
   DEFAULT_STYLES, LANGUAGE_MODES, OUTPUTS, STYLE_SCHEMA, Store, VIEWS, sanitizePresets, sanitizeStyle,
 } from './store.js';
 import { createCleaner } from './textclean.js';
 import { Transcript } from './transcript.js';
+import { checkForUpdate } from './updates.js';
 
 // Gli errori non devono mai far cadere il processo durante l'evento.
 process.on('uncaughtException', (err) => warn('Errore non gestito:', err));
@@ -39,12 +43,34 @@ const store = new Store(path.join(DATA_DIR, 'state.json'), env.DEFAULT_LANGUAGE_
 const state = store.state;
 const settings = new Settings(path.join(DATA_DIR, 'settings.json'));
 const transcript = new Transcript(OUTPUT_DIR);
+const VERSION = env.DUETTO_VERSION || JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
+
+// Nuova versione su GitHub: solo nell'app desktop, se l'utente non l'ha disattivato.
+// DUETTO_UPDATE_API sostituisce l'indirizzo di GitHub nei test.
+let update = null;
+async function refreshUpdate() {
+  const wanted = env.DUETTO_UPDATE_API || (env.DESKTOP_APP === 'true' && env.DUETTO_TEST !== '1');
+  update = wanted && settings.values.checkUpdates
+    ? await checkForUpdate(VERSION, env.DUETTO_UPDATE_API || undefined)
+    : null;
+}
+setTimeout(refreshUpdate, 3000);
 
 // Una chiave salvata nelle Impostazioni ha la precedenza su quella nel file .env.
 const assemblyKey = () => settings.values.assemblyaiApiKey || env.ASSEMBLYAI_API_KEY || '';
 const deeplKey = () => settings.values.deeplApiKey || env.DEEPL_API_KEY || '';
 const cleanFillers = () => settings.values.cleanFillers ?? flag(env.CLEAN_FILLERS, true);
 const cleanProfanity = () => settings.values.cleanProfanity ?? flag(env.CLEAN_PROFANITY, true);
+// Lingua dell'interfaccia: scelta nelle Impostazioni, oppure quella del sistema.
+const applyLanguage = () => setLanguage(resolveUiLanguage(settings.values.uiLanguage, env.DUETTO_LOCALE || env.LANG || ''));
+applyLanguage();
+// Server AssemblyAI: il più vicino (Stati Uniti o Europa) oppure solo Unione Europea, per il GDPR.
+// L'indirizzo nel file .env, usato anche dai test, ha la precedenza.
+const ASSEMBLY_URLS = {
+  auto: 'wss://streaming.assemblyai.com/v3/ws',
+  eu: 'wss://streaming.eu.assemblyai.com/v3/ws',
+};
+const assemblyUrl = () => env.ASSEMBLYAI_WS_URL || ASSEMBLY_URLS[settings.values.assemblyaiRegion] || ASSEMBLY_URLS.auto;
 
 let clean = createCleaner({ fillers: cleanFillers(), profanity: cleanProfanity() });
 
@@ -57,7 +83,7 @@ const deepl = new DeepL({
 
 const link = new AssemblyLink({
   apiKey: assemblyKey(),
-  url: env.ASSEMBLYAI_WS_URL || 'wss://streaming.assemblyai.com/v3/ws',
+  url: assemblyUrl(),
   model: env.ASSEMBLYAI_SPEECH_MODEL || 'universal-3-6-pro',
   minTurnSilence: env.MIN_TURN_SILENCE || '',
   maxTurnSilence: env.MAX_TURN_SILENCE || '700', // chiude prima l'ultimo blocco quando chi parla si ferma
@@ -84,7 +110,7 @@ async function reloadTerms() {
   const terms = loadKeyterms();
   link.setKeyterms(terms);
   const glossary = await deepl.syncGlossary(GLOSSARY_FILE);
-  const message = `${terms.length} termini chiave ricaricati. Glossario: ${glossary}`;
+  const message = t('{n} termini chiave ricaricati. Glossario: {glossary}', { n: terms.length, glossary });
   log(message);
   return message;
 }
@@ -238,10 +264,11 @@ function statusMessage() {
   const aai = link.status();
   return {
     t: 'status',
-    aai: { ...aai, estimatedCost: Number((aai.billedSeconds / 3600 * PRICE_PER_HOUR).toFixed(2)), configured: !!assemblyKey() },
+    aai: { ...aai, estimatedCost: Number((aai.billedSeconds / 3600 * PRICE_PER_HOUR).toFixed(2)), configured: !!assemblyKey(), euOnly: link.cfg.url.includes('.eu.') },
     deepl: deepl.status(),
     lastLanguage: state.lastLanguage,
     demo: !!demoTimer,
+    update,
     overlays: { stream: sseClients.stream.size, room: sseClients.room.size },
     outputDir: transcript.dir ? path.relative(ROOT, transcript.dir) : '',
   };
@@ -296,14 +323,24 @@ function settingsMessage() {
     deeplKey: maskKey(deeplKey()),
     cleanFillers: cleanFillers(),
     cleanProfanity: cleanProfanity(),
+    assemblyaiRegion: settings.values.assemblyaiRegion,
+    uiLanguage: settings.values.uiLanguage,
+    checkUpdates: settings.values.checkUpdates,
+    keysEncrypted: keysEncrypted(),
     keyterms: readTextFile(KEYTERMS_FILE),
     glossary: readTextFile(GLOSSARY_FILE),
   };
 }
 
 async function saveSettings(ws, m) {
+  const before = language();
   const saved = settings.update(m);
+  applyLanguage();
+  refreshUpdate();
+  // Le pagine aperte si ricaricano nella nuova lingua: la regia solo se non sta inviando audio.
+  if (language() !== before) sendControl({ t: 'language', lang: language() });
   link.setApiKey(assemblyKey());
+  link.cfg.url = assemblyUrl(); // vale dalla prossima connessione
   if (deeplKey() !== deepl.cfg.apiKey) deepl.setApiKey(deeplKey());
   clean = createCleaner({ fillers: cleanFillers(), profanity: cleanProfanity() });
   try {
@@ -379,6 +416,7 @@ const CONTROL_FILES = {
   '/control.js': ['control.js', 'text/javascript'],
   '/control.css': ['control.css', 'text/css'],
   '/motion.js': ['motion.js', 'text/javascript'],
+  '/i18n.js': ['i18n.js', 'text/javascript'],
   '/audio-worklet.js': ['audio-worklet.js', 'text/javascript'],
 };
 const OVERLAY_FILES = {
@@ -389,10 +427,16 @@ const OVERLAY_FILES = {
 function serveFile(res, [name, type]) {
   fs.readFile(path.join(ROOT, 'public', name), (err, content) => {
     if (err) {
-      res.writeHead(500).end('Errore di lettura');
+      res.writeHead(500).end(t('Errore di lettura'));
       return;
     }
     res.writeHead(200, { 'Content-Type': `${type}; charset=utf-8`, 'Cache-Control': 'no-store' });
+    // Le traduzioni arrivano con lo script stesso: la pagina appare subito nella lingua giusta.
+    if (name === 'i18n.js') {
+      const head = `window.DUETTO_LANG = ${JSON.stringify(language())};\nwindow.DUETTO_DICT = ${language() === 'en' ? JSON.stringify(englishDictionary()) : '{}'};\n`;
+      res.end(head + content);
+      return;
+    }
     res.end(content);
   });
 }
@@ -422,11 +466,11 @@ const server = http.createServer((req, res) => {
   if (pathname === '/events') { serveEvents(req, res, url); return; }
   if (Object.hasOwn(OVERLAY_FILES, pathname)) { serveFile(res, OVERLAY_FILES[pathname]); return; }
   if (Object.hasOwn(CONTROL_FILES, pathname)) {
-    if (!controlAllowed(req)) { res.writeHead(403).end('Pagina di controllo disponibile solo sul Mac'); return; }
+    if (!controlAllowed(req)) { res.writeHead(403).end(t('Pagina di controllo disponibile solo sul computer dell\'app')); return; }
     serveFile(res, CONTROL_FILES[pathname]);
     return;
   }
-  res.writeHead(404).end('Non trovato');
+  res.writeHead(404).end(t('Non trovato'));
 });
 server.on('clientError', (_err, socket) => socket.destroy());
 

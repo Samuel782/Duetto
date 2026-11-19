@@ -1,7 +1,7 @@
 // Guscio dell'app desktop: avvia il server locale e apre le finestre.
 import path from 'node:path';
 import {
-  app, BrowserWindow, dialog, powerSaveBlocker, screen, session, shell, systemPreferences,
+  app, BrowserWindow, dialog, powerSaveBlocker, safeStorage, screen, session, shell, systemPreferences,
 } from 'electron';
 
 const IS_TEST = process.env.DUETTO_TEST === '1';
@@ -19,6 +19,7 @@ let origin = '';
 let shutdownServer = async () => {};
 let quitAsked = false;
 let quitting = false;
+let t = (text) => text; // sostituita dalla traduzione vera quando il server è caricato
 
 const isOwnUrl = (url) => {
   try { return new URL(url).origin === origin; } catch { return false; }
@@ -27,7 +28,7 @@ const isOwnUrl = (url) => {
 function roomWindowOptions() {
   const primary = screen.getPrimaryDisplay();
   const external = screen.getAllDisplays().find((d) => d.id !== primary.id);
-  const shared = { backgroundColor: '#000000', title: 'Uscita sala', webPreferences: { backgroundThrottling: false } };
+  const shared = { backgroundColor: '#000000', title: t('Uscita sala'), webPreferences: { backgroundThrottling: false } };
   // Senza un secondo schermo resta una finestra normale, per non coprire la regia.
   if (!external) return { ...shared, width: 1280, height: 720 };
   return { ...shared, x: external.bounds.x, y: external.bounds.y, frame: false, fullscreen: true };
@@ -43,7 +44,7 @@ function handleOpenWindow({ url }) {
     return {
       action: 'allow',
       overrideBrowserWindowOptions: {
-        parent: mainWindow, width: 720, height: 860, title: 'Impostazioni', backgroundColor: '#0d0f12', autoHideMenuBar: true,
+        parent: mainWindow, width: 720, height: 860, title: t('Impostazioni'), backgroundColor: '#0d0f12', autoHideMenuBar: true,
       },
     };
   }
@@ -94,11 +95,11 @@ app.on('before-quit', (event) => {
   quitAsked = true;
   const choice = IS_TEST ? 0 : dialog.showMessageBoxSync(mainWindow, {
     type: 'question',
-    buttons: ['Chiudi', 'Annulla'],
+    buttons: [t('Chiudi'), t('Annulla')],
     defaultId: 1,
     cancelId: 1,
-    message: 'Chiudere Duetto?',
-    detail: 'Se sei in diretta, i sottotitoli si fermano.',
+    message: t('Chiudere Duetto?'),
+    detail: t('Se sei in diretta, i sottotitoli si fermano.'),
   });
   if (choice !== 0) {
     quitAsked = false;
@@ -117,6 +118,7 @@ app.on('second-instance', () => {
 app.whenReady().then(async () => {
   const userData = app.getPath('userData');
   process.env.DESKTOP_APP = 'true';
+  process.env.DUETTO_LOCALE = app.getLocale();
   process.env.PORT_FALLBACK = 'true';
   process.env.DATA_DIR = userData;
   process.env.KEYTERMS_FILE = path.join(userData, 'keyterms.txt');
@@ -135,15 +137,29 @@ app.whenReady().then(async () => {
     await systemPreferences.askForMediaAccess('microphone');
   }
 
+  // Le chiavi API si cifrano con il portachiavi del sistema. Va impostato prima di caricare il server,
+  // che legge le impostazioni all'avvio.
+  const { setSecretStore } = await import('../server/settings.js');
+  const canEncrypt = safeStorage.isAsyncEncryptionAvailable
+    ? await safeStorage.isAsyncEncryptionAvailable()
+    : safeStorage.isEncryptionAvailable();
+  if (canEncrypt) {
+    setSecretStore({
+      encrypt: (text) => safeStorage.encryptString(text).toString('base64'),
+      decrypt: (data) => safeStorage.decryptString(Buffer.from(data, 'base64')),
+    });
+  }
+
   // Il server si carica dopo aver impostato i percorsi, che legge all'avvio.
   const server = await import('../server/index.js');
+  ({ t } = await import('../server/i18n.js'));
   server.hooks.openFolder = (folder) => shell.openPath(folder);
   shutdownServer = server.shutdown;
   let ready;
   try {
     ready = await server.serverReady;
   } catch (err) {
-    dialog.showErrorBox('Duetto non può partire', `Nessuna porta disponibile: ${err.message}`);
+    dialog.showErrorBox(t('Duetto non può partire'), t('Nessuna porta disponibile: {error}', { error: err.message }));
     quitting = true;
     app.exit(1);
     return;

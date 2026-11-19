@@ -1,7 +1,9 @@
 // Finestra Impostazioni. Le chiavi salvate non tornano mai qui: si vedono solo le ultime 4 cifre.
 const $ = (id) => document.getElementById(id);
+const { t } = I18N;
 let ws = null;
 let loaded = false;
+let reloadAfterResult = false;
 
 function showResult(el, result) {
   el.textContent = result ? `${result.ok ? '✓' : '✗'} ${result.message}` : '';
@@ -11,14 +13,18 @@ function showResult(el, result) {
 function fill(m) {
   $('assemblyaiKey').value = '';
   $('deeplKey').value = '';
-  $('assemblyaiKey').placeholder = m.assemblyaiKey ? `Salvata (${m.assemblyaiKey})` : 'Incolla qui la chiave';
-  $('deeplKey').placeholder = m.deeplKey ? `Salvata (${m.deeplKey})` : 'Incolla qui la chiave';
+  $('assemblyaiKey').placeholder = m.assemblyaiKey ? t('Salvata ({key})', { key: m.assemblyaiKey }) : t('Incolla qui la chiave');
+  $('deeplKey').placeholder = m.deeplKey ? t('Salvata ({key})', { key: m.deeplKey }) : t('Incolla qui la chiave');
   if (loaded) return; // non cancella ciò che si sta modificando se la connessione si ristabilisce
   loaded = true;
   $('keyterms').value = m.keyterms;
   $('glossary').value = m.glossary;
   $('cleanFillers').checked = m.cleanFillers;
   $('cleanProfanity').checked = m.cleanProfanity;
+  $('checkUpdates').checked = m.checkUpdates;
+  $('assemblyaiRegion').value = m.assemblyaiRegion;
+  $('uiLanguage').value = m.uiLanguage;
+  if (m.keysEncrypted) $('keysNote').textContent = t('Servono per trascrivere e tradurre. Restano solo su questo computer, cifrate con il portachiavi del sistema.');
 }
 
 function connect() {
@@ -27,11 +33,14 @@ function connect() {
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);
     if (m.t === 'settings') fill(m);
+    // Lingua cambiata: la finestra si ricarica appena la verifica delle chiavi è finita.
+    if (m.t === 'language' && m.lang !== I18N.lang) reloadAfterResult = true;
     if (m.t === 'settingsResult') {
       showResult($('assemblyaiResult'), m.assemblyai);
       showResult($('deeplResult'), m.deepl);
-      $('saveNote').textContent = m.saved ? m.terms : 'Salvataggio non riuscito';
+      $('saveNote').textContent = m.saved ? m.terms : t('Salvataggio non riuscito');
       $('save').disabled = false;
+      if (reloadAfterResult) setTimeout(() => location.reload(), 2000);
     }
   };
   ws.onclose = () => {
@@ -42,11 +51,11 @@ function connect() {
 
 $('save').onclick = () => {
   if (ws?.readyState !== WebSocket.OPEN) {
-    $('saveNote').textContent = 'App non raggiungibile, riprova tra poco';
+    $('saveNote').textContent = t('App non raggiungibile, riprova tra poco');
     return;
   }
   $('save').disabled = true;
-  $('saveNote').textContent = 'Verifica in corso…';
+  $('saveNote').textContent = t('Verifica in corso…');
   showResult($('assemblyaiResult'), null);
   showResult($('deeplResult'), null);
   ws.send(JSON.stringify({
@@ -57,6 +66,9 @@ $('save').onclick = () => {
     glossary: $('glossary').value,
     cleanFillers: $('cleanFillers').checked,
     cleanProfanity: $('cleanProfanity').checked,
+    checkUpdates: $('checkUpdates').checked,
+    assemblyaiRegion: $('assemblyaiRegion').value,
+    uiLanguage: $('uiLanguage').value,
   }));
 };
 

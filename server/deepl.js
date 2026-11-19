@@ -1,4 +1,5 @@
 // Traduzione con DeepL: timeout di 3 s, un solo nuovo tentativo, poi si prosegue senza traduzione.
+import { locale, t } from './i18n.js';
 import fs from 'node:fs';
 import { log, warn } from './log.js';
 
@@ -37,7 +38,7 @@ export class DeepL {
     this.base = (cfg.endpoint || endpointForKey(cfg.apiKey)).replace(/\/+$/, '');
     this.modelType = cfg.modelType || null;
     this.glossaryId = null;
-    this.glossaryNote = 'nessun glossario';
+    this.glossaryNote = t('nessun glossario');
     this.inFlight = 0;
     this.quotaExhausted = false;
     this.lastError = '';
@@ -59,18 +60,18 @@ export class DeepL {
 
   // Controlla la chiave salvata e aggiorna i caratteri mostrati in regia.
   async test() {
-    if (!this.cfg.apiKey) return { ok: false, message: 'Chiave mancante' };
+    if (!this.cfg.apiKey) return { ok: false, message: t('Chiave mancante') };
     try {
       const res = await fetch(`${this.base}/v2/usage`, { headers: this.headers, signal: AbortSignal.timeout(6000) });
-      if (res.status === 403) return { ok: false, message: 'Chiave rifiutata da DeepL' };
-      if (!res.ok) return { ok: false, message: `Errore HTTP ${res.status}` };
+      if (res.status === 403) return { ok: false, message: t('Chiave rifiutata da DeepL') };
+      if (!res.ok) return { ok: false, message: t('Errore HTTP {status}', { status: res.status }) };
       const data = await res.json();
       this.characterCount = data.character_count ?? null;
       this.characterLimit = data.character_limit ?? null;
       const left = Math.max(0, (data.character_limit ?? 0) - (data.character_count ?? 0));
-      return { ok: true, message: `Chiave valida, ${left.toLocaleString('it-IT')} caratteri disponibili` };
+      return { ok: true, message: t('Chiave valida, {n} caratteri disponibili', { n: left.toLocaleString(locale()) }) };
     } catch (err) {
-      return { ok: false, message: `Nessuna risposta: ${err.message}` };
+      return { ok: false, message: t('Nessuna risposta: {error}', { error: err.message }) };
     }
   }
 
@@ -83,7 +84,7 @@ export class DeepL {
   async translate(text, sourceLang, context, detect = false) {
     if (!this.cfg.apiKey || this.quotaExhausted) return null;
     if (this.inFlight >= MAX_IN_FLIGHT) {
-      this.lastError = 'Troppe traduzioni in coda';
+      this.lastError = t('Troppe traduzioni in coda');
       return null;
     }
     this.inFlight += 1;
@@ -144,20 +145,20 @@ export class DeepL {
       await res.body?.cancel().catch(() => {});
       if (res.status === 456) {
         this.quotaExhausted = true;
-        return { error: 'Quota DeepL esaurita', retry: false };
+        return { error: t('Quota DeepL esaurita'), retry: false };
       }
       if (res.status === 400 && (this.modelType || this.glossaryId)) {
         // Un'opzione non è accettata dal piano: si riprova senza, per non fermare le traduzioni.
         warn('DeepL: richiesta rifiutata, disattivo model_type e glossario');
         this.modelType = null;
-        if (this.glossaryId) this.glossaryNote = 'glossario rifiutato da DeepL, ignorato';
+        if (this.glossaryId) this.glossaryNote = t('glossario rifiutato da DeepL, ignorato');
         this.glossaryId = null;
-        return { error: 'Richiesta rifiutata (400)', retry: true };
+        return { error: t('Richiesta rifiutata (400)'), retry: true };
       }
-      return { error: `Errore HTTP ${res.status}`, retry: res.status === 429 || res.status >= 500 };
+      return { error: t('Errore HTTP {status}', { status: res.status }), retry: res.status === 429 || res.status >= 500 };
     } catch (err) {
       const timedOut = err.name === 'TimeoutError' || err.name === 'AbortError';
-      return { error: timedOut ? 'Timeout oltre 3 s' : `Rete: ${err.message}`, retry: true };
+      return { error: timedOut ? t('Timeout oltre 3 s') : t('Rete: {error}', { error: err.message }), retry: true };
     }
   }
 
@@ -169,7 +170,7 @@ export class DeepL {
       });
       if (!res.ok) {
         await res.body?.cancel().catch(() => {});
-        if (res.status === 403) this.lastError = 'Chiave DeepL rifiutata: controlla chiave ed endpoint';
+        if (res.status === 403) this.lastError = t('Chiave DeepL rifiutata: controlla chiave ed endpoint');
         return;
       }
       const data = await res.json();
@@ -183,7 +184,7 @@ export class DeepL {
   // Crea il glossario (entrambe le direzioni), sostituendo quello creato dall'avvio precedente.
   async syncGlossary(filePath) {
     this.glossaryId = null;
-    if (!this.cfg.apiKey) { this.glossaryNote = 'chiave DeepL mancante'; return this.glossaryNote; }
+    if (!this.cfg.apiKey) { this.glossaryNote = t('chiave DeepL mancante'); return this.glossaryNote; }
     let pairs = [];
     try {
       pairs = parseGlossaryCsv(fs.readFileSync(filePath, 'utf8'));
@@ -195,7 +196,7 @@ export class DeepL {
       });
       if (!list.ok) {
         await list.body?.cancel().catch(() => {});
-        this.glossaryNote = `glossari non disponibili con questo piano (HTTP ${list.status}): file ignorato`;
+        this.glossaryNote = t('glossari non disponibili con questo piano (HTTP {status}): file ignorato', { status: list.status });
         warn(`DeepL: ${this.glossaryNote}`);
         return this.glossaryNote;
       }
@@ -206,7 +207,7 @@ export class DeepL {
         });
         await del.body?.cancel().catch(() => {});
       }
-      if (!pairs.length) { this.glossaryNote = 'nessun termine nel glossario'; return this.glossaryNote; }
+      if (!pairs.length) { this.glossaryNote = t('nessun termine nel glossario'); return this.glossaryNote; }
 
       const toTsv = (from, to) => pairs.map((p) => `${p[from]}\t${p[to]}`).join('\n');
       const res = await fetch(`${this.base}/v3/glossaries`, {
@@ -223,15 +224,15 @@ export class DeepL {
       });
       if (!res.ok) {
         await res.body?.cancel().catch(() => {});
-        this.glossaryNote = `creazione del glossario rifiutata (HTTP ${res.status}): file ignorato`;
+        this.glossaryNote = t('creazione del glossario rifiutata (HTTP {status}): file ignorato', { status: res.status });
         warn(`DeepL: ${this.glossaryNote}`);
         return this.glossaryNote;
       }
       this.glossaryId = (await res.json()).glossary_id;
-      this.glossaryNote = `${pairs.length} termini attivi`;
+      this.glossaryNote = t('{n} termini attivi', { n: pairs.length });
       log(`DeepL: glossario con ${pairs.length} termini`);
     } catch (err) {
-      this.glossaryNote = `glossario non caricato: ${err.message}`;
+      this.glossaryNote = t('glossario non caricato: {error}', { error: err.message });
       warn(`DeepL: ${this.glossaryNote}`);
     }
     return this.glossaryNote;

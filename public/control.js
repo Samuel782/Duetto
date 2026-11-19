@@ -1,5 +1,6 @@
 // Pagina di controllo: cattura l'audio, invia i comandi al server e mostra lo stato.
 const $ = (id) => document.getElementById(id);
+const { t } = I18N;
 const OUTPUTS = ['stream', 'room'];
 const VIEW_KEYS = {
   1: ['stream', 'both'], 2: ['stream', 'translation'], 3: ['stream', 'original'],
@@ -38,6 +39,11 @@ function connect() {
     else if (m.t === 'state') { appState = m; renderState(); }
     else if (m.t === 'status') { lastStatus = m; renderStatus(); }
     else if (m.t === 'notice') { $('notice').textContent = m.message; }
+    // Lingua cambiata nelle Impostazioni: si ricarica subito, ma mai mentre l'audio è in invio.
+    else if (m.t === 'language' && m.lang !== I18N.lang) {
+      if (!sending) location.reload();
+      else $('notice').textContent = t('La nuova lingua si applica dopo la pausa: ricarica la pagina quando vuoi.');
+    }
   };
   ws.onclose = () => renderStatus();
   ws.onerror = () => {};
@@ -73,7 +79,7 @@ async function listDevices() {
     const devices = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput');
     const select = $('device');
     const wanted = select.value || safeStore.get('audioDevice');
-    select.replaceChildren(...devices.map((d, i) => new Option(d.label || `Ingresso ${i + 1}`, d.deviceId)));
+    select.replaceChildren(...devices.map((d, i) => new Option(d.label || t('Ingresso {n}', { n: i + 1 }), d.deviceId)));
     if (devices.some((d) => d.deviceId === wanted)) select.value = wanted;
   } catch { /* gestito all'avvio della cattura */ }
 }
@@ -105,7 +111,7 @@ async function openInput() {
   sourceNode.connect(captureNode).connect(mute).connect(audioContext.destination);
   const track = stream.getAudioTracks()[0];
   track.onended = () => {
-    if (wantCapture) scheduleReopen('Ingresso audio perso: nuovo tentativo…');
+    if (wantCapture) scheduleReopen(t('Ingresso audio perso: nuovo tentativo…'));
   };
   lastSignalAt = lastFrameAt = Date.now();
 }
@@ -125,7 +131,7 @@ function scheduleReopen(message) {
       await openInput();
       renderAudioButtons();
     } catch (err) {
-      scheduleReopen(`Ingresso non disponibile (${err.name}): nuovo tentativo…`);
+      scheduleReopen(t('Ingresso non disponibile ({error}): nuovo tentativo…', { error: err.name }));
     }
   }, 2000);
 }
@@ -148,8 +154,8 @@ function setAudioNote(text, level = '') {
 }
 
 function showAudioError(err) {
-  const hints = { NotAllowedError: 'consenti il microfono nel browser', OverconstrainedError: 'ingresso non trovato, scegline un altro' };
-  setAudioNote(`Audio non disponibile: ${hints[err.name] || err.message}`, 'bad');
+  const hints = { NotAllowedError: t('consenti il microfono nel browser'), OverconstrainedError: t('ingresso non trovato, scegline un altro') };
+  setAudioNote(t('Audio non disponibile: {error}', { error: hints[err.name] || err.message }), 'bad');
 }
 
 // L'ingresso resta aperto anche prima di Avvia: mostra il livello e i nomi, senza inviare nulla.
@@ -212,13 +218,13 @@ setInterval(() => {
   $('level').classList.toggle('hot', peakHold >= 0.98);
   if (!wantCapture) return;
   const now = Date.now();
-  if (audioContext?.state === 'suspended') setAudioNote('Audio sospeso dal browser: clicca sulla pagina', 'bad');
-  else if (now - lastFrameAt > 2000) setAudioNote('Nessun dato dall\'ingresso audio', 'bad');
-  else if (now - lastClipAt < 2000) setAudioNote('Segnale in saturazione: abbassa il livello dal mixer', 'bad');
-  else if (now - lastSignalAt > 5000) setAudioNote('Segnale assente da oltre 5 secondi', 'warn');
-  else if (sending) setAudioNote(`In invio, picco ${db.toFixed(0)} dB`);
-  else if (started) setAudioNote(`In pausa, nessun credito consumato. Picco ${db.toFixed(0)} dB`);
-  else setAudioNote(`Pronto, nessun audio inviato. Picco ${db.toFixed(0)} dB`);
+  if (audioContext?.state === 'suspended') setAudioNote(t('Audio sospeso dal browser: clicca sulla pagina'), 'bad');
+  else if (now - lastFrameAt > 2000) setAudioNote(t('Nessun dato dall\'ingresso audio'), 'bad');
+  else if (now - lastClipAt < 2000) setAudioNote(t('Segnale in saturazione: abbassa il livello dal mixer'), 'bad');
+  else if (now - lastSignalAt > 5000) setAudioNote(t('Segnale assente da oltre 5 secondi'), 'warn');
+  else if (sending) setAudioNote(t('In invio, picco {db} dB', { db: db.toFixed(0) }));
+  else if (started) setAudioNote(t('In pausa, nessun credito consumato. Picco {db} dB', { db: db.toFixed(0) }));
+  else setAudioNote(t('Pronto, nessun audio inviato. Picco {db} dB', { db: db.toFixed(0) }));
 }, 200);
 
 document.addEventListener('pointerdown', () => audioContext?.state === 'suspended' && audioContext.resume());
@@ -232,7 +238,7 @@ $('device').onchange = async () => {
   safeStore.set('audioDevice', $('device').value);
   $('device').blur();
   if (wantCapture) {
-    try { await openInput(); } catch (err) { scheduleReopen(`Ingresso non disponibile (${err.name})`); }
+    try { await openInput(); } catch (err) { scheduleReopen(t('Ingresso non disponibile ({error})', { error: err.name })); }
   }
 };
 
@@ -284,7 +290,7 @@ function renderState() {
     card.classList.toggle('is-hidden', profile.hidden);
     card.querySelectorAll('[data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === profile.view));
     const hide = card.querySelector('[data-act="hidden"]');
-    hide.textContent = profile.hidden ? 'Mostra' : 'Nascondi';
+    hide.textContent = profile.hidden ? t('Mostra') : t('Nascondi');
     hide.classList.toggle('hidden-on', profile.hidden);
   }
   syncStyleInputs();
@@ -293,13 +299,13 @@ function renderState() {
 }
 
 const AAI_LABELS = {
-  idle: ['Ferma', ''], connecting: ['Connessione…', 'st-warn'],
-  reconnecting: ['Riconnessione…', 'st-bad'], connected: ['Connessa', 'st-ok'],
+  idle: [t('Ferma'), ''], connecting: [t('Connessione…'), 'st-warn'],
+  reconnecting: [t('Riconnessione…'), 'st-bad'], connected: [t('Connessa'), 'st-ok'],
 };
-const LANG_LABELS = { it: 'Italiano', en: 'Inglese' };
-const VIEW_LABELS = { both: 'Orig. + trad.', translation: 'Solo trad.', original: 'Solo orig.' };
+const LANG_LABELS = { it: t('Italiano'), en: t('Inglese') };
+const VIEW_LABELS = { both: t('Orig. + trad.'), translation: t('Solo trad.'), original: t('Solo orig.') };
 const fmtHours = (sec) => `${Math.floor(sec / 3600)} h ${String(Math.floor(sec / 60) % 60).padStart(2, '0')} min`;
-const fmtNum = (n) => (n == null ? '—' : n.toLocaleString('it-IT'));
+const fmtNum = (n) => (n == null ? '—' : n.toLocaleString(I18N.locale));
 
 function renderStatus() {
   const rows = [];
@@ -308,41 +314,42 @@ function renderStatus() {
   let bannerWarn = false;
 
   if (!isOpen()) {
-    add('Server', 'Non raggiungibile, riconnessione…', 'st-bad');
-    banner = 'Connessione col server persa';
+    add(t('Server'), t('Non raggiungibile, riconnessione…'), 'st-bad');
+    banner = t('Connessione col server persa');
   } else if (lastStatus) {
     const { aai, deepl } = lastStatus;
     const [label, cls] = AAI_LABELS[aai.state];
     let aaiText = label;
-    if (aai.state === 'reconnecting' && aai.retryInSeconds) aaiText += ` tra ${aai.retryInSeconds} s`;
-    if (aai.handoff) aaiText += ' (cambio sessione)';
+    if (aai.state === 'reconnecting' && aai.retryInSeconds) aaiText += t(' tra {s} s', { s: aai.retryInSeconds });
+    if (aai.handoff) aaiText += t(' (cambio sessione)');
     add('AssemblyAI', aaiText, cls);
-    if (aai.bufferedMs > 300) add('Buffer audio', `${(aai.bufferedMs / 1000).toFixed(1)} s`, 'st-warn');
-    if (!aai.configured) add('Chiave', 'AssemblyAI mancante: apri Impostazioni', 'st-bad');
-    if (aai.lastError) add('Ultimo errore', aai.lastError, 'st-bad');
-    add('Lingua rilevata', LANG_LABELS[lastStatus.lastLanguage] || '—');
+    add(t('Regione'), aai.euOnly ? t('Solo Unione Europea') : t('Il più vicino (UE o USA)'));
+    if (aai.bufferedMs > 300) add(t('Buffer audio'), `${(aai.bufferedMs / 1000).toFixed(1)} s`, 'st-warn');
+    if (!aai.configured) add(t('Chiave'), t('AssemblyAI mancante: apri Impostazioni'), 'st-bad');
+    if (aai.lastError) add(t('Ultimo errore'), aai.lastError, 'st-bad');
+    add(t('Lingua rilevata'), LANG_LABELS[lastStatus.lastLanguage] || '—');
     if (appState) {
-      add('Modalità', appState.languageMode);
-      add('Streaming', `${VIEW_LABELS[appState.outputs.stream.view]} · finestre: ${lastStatus.overlays.stream}`);
-      add('Sala', `${VIEW_LABELS[appState.outputs.room.view]} · finestre: ${lastStatus.overlays.room}`);
+      add(t('Modalità'), appState.languageMode);
+      add(t('Streaming'), t('{view} · finestre: {n}', { view: VIEW_LABELS[appState.outputs.stream.view], n: lastStatus.overlays.stream }));
+      add(t('Sala'), t('{view} · finestre: {n}', { view: VIEW_LABELS[appState.outputs.room.view], n: lastStatus.overlays.room }));
     }
-    add('Latenza trad.', deepl.avgMs ? `${deepl.avgMs} ms` : '—');
-    add('DeepL usati', fmtNum(deepl.used));
-    add('DeepL rimasti', fmtNum(deepl.remaining), deepl.low ? 'st-bad' : '');
-    if (!deepl.configured) add('Chiave', 'DeepL mancante: apri Impostazioni', 'st-bad');
-    if (deepl.lastError) add('Errore DeepL', deepl.lastError, 'st-bad');
-    add('Glossario', deepl.glossary);
-    add('Ore di sessione', fmtHours(aai.billedSeconds));
-    add('Crediti stimati', `$${aai.estimatedCost.toFixed(2)}`);
-    if (lastStatus.outputDir) add('File', lastStatus.outputDir);
-    $('demo').textContent = lastStatus.demo ? 'Ferma demo' : 'Avvia demo';
+    add(t('Latenza trad.'), deepl.avgMs ? `${deepl.avgMs} ms` : '—');
+    add(t('DeepL usati'), fmtNum(deepl.used));
+    add(t('DeepL rimasti'), fmtNum(deepl.remaining), deepl.low ? 'st-bad' : '');
+    if (!deepl.configured) add(t('Chiave'), t('DeepL mancante: apri Impostazioni'), 'st-bad');
+    if (deepl.lastError) add(t('Errore DeepL'), deepl.lastError, 'st-bad');
+    add(t('Glossario'), deepl.glossary);
+    add(t('Ore di sessione'), fmtHours(aai.billedSeconds));
+    add(t('Crediti stimati'), `$${aai.estimatedCost.toFixed(2)}`);
+    if (lastStatus.outputDir) add(t('File'), lastStatus.outputDir);
+    $('demo').textContent = lastStatus.demo ? t('Ferma demo') : t('Avvia demo');
     $('demo').disabled = !lastStatus.demo && aai.state !== 'idle';
 
-    if (aai.fatal) banner = `AssemblyAI rifiuta la connessione: ${aai.lastError}`;
-    else if (aai.state === 'reconnecting') banner = 'AssemblyAI non raggiungibile: riconnessione in corso';
-    else if (deepl.quotaExhausted) banner = 'Caratteri DeepL esauriti: si vede solo l\'originale';
-    else if (deepl.low) { banner = `Caratteri DeepL sotto il 10%: ne restano ${fmtNum(deepl.remaining)}`; bannerWarn = true; }
-    if (lastStatus.demo) { banner = 'DEMO ATTIVA: gli overlay aperti mostrano testo finto'; bannerWarn = true; }
+    if (aai.fatal) banner = t('AssemblyAI rifiuta la connessione: {error}', { error: aai.lastError });
+    else if (aai.state === 'reconnecting') banner = t('AssemblyAI non raggiungibile: riconnessione in corso');
+    else if (deepl.quotaExhausted) banner = t('Caratteri DeepL esauriti: si vede solo l\'originale');
+    else if (deepl.low) { banner = t('Caratteri DeepL sotto il 10%: ne restano {n}', { n: fmtNum(deepl.remaining) }); bannerWarn = true; }
+    if (lastStatus.demo) { banner = t('DEMO ATTIVA: gli overlay aperti mostrano testo finto'); bannerWarn = true; }
   }
 
   $('status').replaceChildren(...rows.flatMap(([label, value, cls]) => {
@@ -371,7 +378,26 @@ function renderSupport() {
   const busy = lastStatus && (lastStatus.aai.state !== 'idle' || lastStatus.demo);
   if (busy) supportDismissed = true;
   $('support').hidden = supportDismissed || !lastStatus;
+  renderUpdate(busy);
 }
+
+// --- Nuova versione disponibile: stesso comportamento dell'invito, ma chiuso solo per quella versione ---
+
+const UPDATE_KEY = 'duetto.updateDismissed';
+
+function renderUpdate(busy) {
+  const update = lastStatus?.update;
+  const show = update && !busy && safeStore.get(UPDATE_KEY) !== update.version;
+  $('update').hidden = !show;
+  if (!show) return;
+  $('updateTitle').textContent = t('È disponibile Duetto {version}', { version: update.version });
+  $('updateLink').href = update.url;
+}
+
+$('updateClose').onclick = () => {
+  if (lastStatus?.update) safeStore.set(UPDATE_KEY, lastStatus.update.version);
+  renderUpdate(true);
+};
 
 $('supportClose').onclick = () => { supportDismissed = true; renderSupport(); };
 $('supportSnooze').onclick = () => {
@@ -407,16 +433,16 @@ function buildStylePanel() {
     const box = document.createElement('div');
     box.className = 'group';
     const title = document.createElement('h3');
-    title.textContent = group.group;
+    title.textContent = t(group.group);
     const grid = document.createElement('div');
     grid.className = 'fields';
     for (const f of group.fields) {
       const label = document.createElement('label');
-      label.textContent = f.label;
+      label.textContent = t(f.label);
       let input;
       if (f.type === 'select') {
         input = document.createElement('select');
-        f.options.forEach(([value, text]) => input.add(new Option(text, value)));
+        f.options.forEach(([value, text]) => input.add(new Option(t(text), value)));
       } else {
         input = document.createElement('input');
         if (f.type === 'number') Object.assign(input, { type: 'number', min: f.min, max: f.max, step: f.step });
@@ -489,16 +515,16 @@ $('presetImport').onchange = async (e) => {
   if (!file) return;
   try {
     send({ cmd: 'presetImport', presets: JSON.parse(await file.text()) });
-    $('notice').textContent = `Preset importati da ${file.name}`;
+    $('notice').textContent = t('Preset importati da {file}', { file: file.name });
   } catch {
-    $('notice').textContent = 'File JSON non valido';
+    $('notice').textContent = t('File JSON non valido');
   }
 };
 
 // --- Collegamenti e finestre ---
 
 function renderLinks(links) {
-  const rows = [['OBS', links.stream], ['Sala', links.room], ...links.network.map((url) => ['Altro computer', url])];
+  const rows = [['OBS', links.stream], [t('Sala'), links.room], ...links.network.map((url) => [t('Altro computer'), url])];
   $('links').replaceChildren(...rows.map(([label, url]) => {
     const row = document.createElement('div');
     row.className = 'link-row';
@@ -507,12 +533,12 @@ function renderLinks(links) {
     const code = document.createElement('code');
     code.textContent = url;
     const copy = document.createElement('button');
-    copy.textContent = 'Copia';
+    copy.textContent = t('Copia');
     copy.onclick = async () => {
       try {
         await navigator.clipboard.writeText(url);
-        copy.textContent = 'Copiato';
-        setTimeout(() => { copy.textContent = 'Copia'; }, 1500);
+        copy.textContent = t('Copiato');
+        setTimeout(() => { copy.textContent = t('Copia'); }, 1500);
       } catch { /* resta visibile per la copia manuale */ }
     };
     row.append(name, code, copy);

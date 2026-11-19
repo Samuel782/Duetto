@@ -46,6 +46,8 @@
 }
 
 * { box-sizing: border-box; }
+/* Un elemento nascosto resta nascosto anche quando una regola gli assegna display. */
+[hidden] { display: none !important; }
 html { font-size: 100%; -webkit-text-size-adjust: 100%; }
 /* Testo: carattere di sistema, interlinea ampia per il corpo, tracking quasi nullo. */
 body {

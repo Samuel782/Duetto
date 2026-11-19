@@ -29,9 +29,9 @@ Niente stenotipisti, niente cabina per gli interpreti, niente codice: basta un p
 
 Duetto funziona su **Mac** e su PC **Windows**. La trascrizione usa [AssemblyAI](https://www.assemblyai.com) e la traduzione [DeepL](https://www.deepl.com/pro-api): serve una chiave per ciascuno, ed entrambi offrono credito gratuito per iniziare. Un'ora di parlato costa all'incirca uno o due euro.
 
-Scaricalo dalla pagina [Releases](https://github.com/Samuel782/Duetto/releases), aprilo e incolla le due chiavi.
+Scaricalo dalla pagina [Releases](https://github.com/Samuel782/Duetto/releases), aprilo e incolla le due chiavi. L'interfaccia è in italiano o in inglese, secondo la lingua del computer o la scelta nelle Impostazioni. All'avvio Duetto ti avvisa se c'è una nuova versione.
 
-Le chiavi restano sul tuo computer, e così i file dei sottotitoli. Mentre Duetto è in funzione, l'audio va ad AssemblyAI e il testo a DeepL: avvisa relatori e partecipanti se l'evento lo richiede.
+Le chiavi restano sul tuo computer, cifrate con il portachiavi del sistema, e così i file dei sottotitoli. Mentre Duetto è in funzione, l'audio va ad AssemblyAI e il testo a DeepL: avvisa relatori e partecipanti se l'evento lo richiede. Se i dati devono restare in Europa, scegli **Solo Unione Europea** nelle Impostazioni: AssemblyAI elaborerà l'audio sui suoi server europei.
 
 ## Gratis per te, a pagamento per lavoro
 

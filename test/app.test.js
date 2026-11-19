@@ -10,7 +10,9 @@ import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 import { parseGlossaryCsv } from '../server/deepl.js';
 import { TurnSegmenter } from '../server/segmenter.js';
+import { Settings, setSecretStore } from '../server/settings.js';
 import { Store } from '../server/store.js';
+import { checkForUpdate, isNewer } from '../server/updates.js';
 import { createCleaner } from '../server/textclean.js';
 import { FRAME_MAGIC, startMock } from './mock-services.js';
 
@@ -36,7 +38,7 @@ async function setup(extraEnv = {}, mockOptions = {}) {
     cwd: fileURLToPath(new URL('..', import.meta.url)),
     env: {
       PATH: process.env.PATH,
-      PORT: String(port), HOST: '127.0.0.1',
+      PORT: String(port), HOST: '127.0.0.1', DUETTO_LOCALE: 'it',
       ASSEMBLYAI_API_KEY: 'mock-key', ASSEMBLYAI_WS_URL: `ws://127.0.0.1:${mock.port}/v3/ws`,
       DEEPL_API_KEY: 'mock:fx', DEEPL_ENDPOINT: `http://127.0.0.1:${mock.port}`,
       DATA_DIR: path.join(tmp, 'data'), OUTPUT_DIR: path.join(tmp, 'output'),
@@ -436,4 +438,99 @@ test('stili della 1.0.1: la traduzione eredita il carattere unico', () => {
   assert.equal(store.state.presets.Vecchio.sizeTranslation, 30);
   assert.equal(store.state.presets.Nuovo.sizeTranslation, 20, 'valore separato già scelto');
   fs.rmSync(tmp, { recursive: true, force: true });
+});
+
+test('chiavi cifrate: migrazione, rilettura e chiave non decifrabile', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'duetto-settings-'));
+  const file = path.join(tmp, 'settings.json');
+  // Cifratura finta ma reversibile, al posto del portachiavi del sistema.
+  const fake = {
+    encrypt: (t) => Buffer.from([...t].reverse().join('')).toString('base64'),
+    decrypt: (d) => [...Buffer.from(d, 'base64').toString()].reverse().join(''),
+  };
+  try {
+    fs.writeFileSync(file, JSON.stringify({ assemblyaiApiKey: 'aai-in-chiaro', deeplApiKey: '', assemblyaiRegion: 'marte' }));
+    setSecretStore(fake);
+    const first = new Settings(file);
+    assert.equal(first.values.assemblyaiApiKey, 'aai-in-chiaro');
+    assert.equal(first.values.assemblyaiRegion, 'auto', 'regione sconosciuta scartata');
+    const raw = fs.readFileSync(file, 'utf8');
+    assert.ok(!raw.includes('aai-in-chiaro'), 'la chiave in chiaro viene cifrata subito');
+    assert.match(JSON.parse(raw).assemblyaiApiKey, /^enc:v1:/);
+
+    first.update({ deeplApiKey: ' dl-nuova:fx ', assemblyaiRegion: 'eu' });
+    const again = new Settings(file);
+    assert.equal(again.values.deeplApiKey, 'dl-nuova:fx');
+    assert.equal(again.values.assemblyaiRegion, 'eu');
+
+    setSecretStore({ encrypt: fake.encrypt, decrypt: () => { throw new Error('portachiavi negato'); } });
+    const denied = new Settings(file);
+    assert.equal(denied.values.assemblyaiApiKey, '', 'chiave illeggibile: va reinserita, nessun crollo');
+
+    setSecretStore(null);
+    assert.equal(new Settings(file).values.deeplApiKey, '', 'senza cifratura la chiave cifrata non si usa');
+  } finally {
+    setSecretStore(null);
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('traduzioni inglesi: ogni testo dell\'interfaccia ha la sua', async () => {
+  const root = fileURLToPath(new URL('..', import.meta.url));
+  const dict = JSON.parse(fs.readFileSync(path.join(root, 'public/i18n/en.json'), 'utf8'));
+  // Nomi propri e sigle restano uguali nelle due lingue.
+  const same = new Set(['AUTO', 'IT', 'EN', 'Duetto', 'Audio', 'Font', 'Google Font', 'Preset', 'Streaming', 'File', 'English', 'Server', 'OBS']);
+  const keys = new Set();
+  for (const f of ['public/control.js', 'public/settings.js', 'server/index.js', 'server/deepl.js', 'server/assemblyai.js', 'electron/main.js']) {
+    const src = fs.readFileSync(path.join(root, f), 'utf8');
+    for (const m of src.matchAll(/\bt\('((?:[^'\\]|\\.)*)'/g)) keys.add(m[1].replace(/\\'/g, "'"));
+  }
+  const { STYLE_SCHEMA } = await import('../server/store.js');
+  for (const g of STYLE_SCHEMA) {
+    keys.add(g.group);
+    for (const f of g.fields) { keys.add(f.label); for (const [, text] of f.options || []) keys.add(text); }
+  }
+  for (const f of ['public/control.html', 'public/settings.html']) {
+    const html = fs.readFileSync(path.join(root, f), 'utf8')
+      .replace(/<head>[\s\S]*?<\/head>|<script[\s\S]*?<\/script>|<code[\s\S]*?<\/code>|<datalist[\s\S]*?<\/datalist>/g, ' ');
+    for (const m of html.matchAll(/(?:placeholder|aria-label|title)="([^"]+)"/g)) keys.add(m[1].replace(/&#10;/g, '\n'));
+    for (const m of html.matchAll(/>([^<>]+)</g)) {
+      const text = m[1].trim();
+      if (/[a-zà-ù]{2}/i.test(text)) keys.add(text);
+    }
+  }
+  const missing = [...keys].filter((k) => !same.has(k) && !(k in dict));
+  assert.deepEqual(missing, [], 'testi senza traduzione inglese');
+  for (const [it, en] of Object.entries(dict)) {
+    const vars = (s) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort().join();
+    assert.equal(vars(en), vars(it), `segnaposto diversi in: ${it}`);
+  }
+});
+
+test('aggiornamenti: confronto versioni e risposta di GitHub', async () => {
+  assert.equal(isNewer('1.10.0', '1.9.2'), true);
+  assert.equal(isNewer('v1.2.0', '1.2.0'), false);
+  assert.equal(isNewer('1.1.9', '1.2.0'), false);
+  assert.equal(isNewer('2.0', '1.9.9'), true);
+
+  let release = { tag_name: 'v1.3.0', html_url: 'https://github.com/Samuel782/Duetto/releases/tag/v1.3.0' };
+  const server = http.createServer((req, res) => {
+    if (release === 'error') { res.writeHead(500).end(); return; }
+    res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(release));
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const api = `http://127.0.0.1:${server.address().port}/latest`;
+  try {
+    assert.deepEqual(await checkForUpdate('1.2.0', api), { version: '1.3.0', url: release.html_url });
+    assert.equal(await checkForUpdate('1.3.0', api), null, 'già aggiornata');
+    release = { ...release, prerelease: true };
+    assert.equal(await checkForUpdate('1.2.0', api), null, 'le pre-release non si segnalano');
+    release = { tag_name: 'v9.0.0', html_url: 'https://altro-sito.example/trappola' };
+    assert.equal((await checkForUpdate('1.2.0', api)).url, 'https://github.com/Samuel782/Duetto/releases', 'link solo verso GitHub');
+    release = 'error';
+    assert.equal(await checkForUpdate('1.2.0', api), null, 'errore di GitHub: nessun avviso');
+  } finally {
+    server.close();
+  }
+  assert.equal(await checkForUpdate('1.2.0', 'http://127.0.0.1:1/chiuso'), null, 'senza rete: nessun avviso');
 });

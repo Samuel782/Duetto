@@ -12,7 +12,7 @@
 
   <section class="card">
     <h2>Chiavi di accesso</h2>
-    <p class="note">Servono per trascrivere e tradurre. Restano salvate solo su questo computer.</p>
+    <p class="note" id="keysNote">Servono per trascrivere e tradurre. Restano salvate solo su questo computer.</p>
 
     <label class="field">AssemblyAI (trascrizione)
       <input id="assemblyaiKey" type="password" autocomplete="off" spellcheck="false">
@@ -25,6 +25,14 @@
     </label>
     <p class="result" id="deeplResult"></p>
     <a href="https://www.deepl.com/pro-api" target="_blank" rel="noopener">Ottieni una chiave DeepL gratuita</a>
+
+    <label class="field">Dove AssemblyAI elabora l'audio
+      <select id="assemblyaiRegion">
+        <option value="auto">Il server più vicino (Unione Europea o Stati Uniti)</option>
+        <option value="eu">Solo Unione Europea</option>
+      </select>
+    </label>
+    <p class="note">Scegli "Solo Unione Europea" se l'evento richiede che i dati restino in Europa. Vale dalla prossima volta che premi Avvia.</p>
   </section>
 
   <section class="card">
@@ -38,9 +46,26 @@
   </section>
 
   <section class="card">
+    <h2>Lingua dell'interfaccia</h2>
+    <label class="field">Lingua di regia e Impostazioni
+      <select id="uiLanguage">
+        <option value="auto">Come il sistema</option>
+        <option value="it">Italiano</option>
+        <option value="en">English</option>
+      </select>
+    </label>
+  </section>
+
+  <section class="card">
     <h2>Pulizia del testo</h2>
     <label class="check"><input id="cleanFillers" type="checkbox"> Togli gli intercalari ("ehm", "cioè cioè", "you know")</label>
     <label class="check"><input id="cleanProfanity" type="checkbox"> Attenua le parolacce</label>
+  </section>
+
+  <section class="card">
+    <h2>Aggiornamenti</h2>
+    <label class="check"><input id="checkUpdates" type="checkbox"> All'avvio controlla su GitHub se c'è una nuova versione</label>
+    <p class="note">Solo un avviso nella regia, con il link per scaricarla. Non installa nulla da solo.</p>
   </section>
 
   <div class="save-bar">
@@ -48,6 +73,7 @@
     <span id="saveNote" class="note"></span>
   </div>
 </main>
+<script src="/i18n.js"></script>
 <script src="/settings.js"></script>
 </body>
 </html>
