@@ -96,6 +96,25 @@ aside { display: grid; gap: 1rem; position: sticky; top: 4.5rem; }
 .row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: flex-end; margin-top: 0.75rem; }
 .grow { flex: 1 1 12.5rem; min-width: 0; }
 
+/* --- Invito a sostenere Duetto: solo a sottotitoli fermi, mai nelle uscite --- */
+.support { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1.25rem; }
+.support[hidden] { display: none; }
+.support-text { flex: 1 1 18rem; min-width: 0; }
+.support h2 { margin-bottom: 0.25rem; }
+.support p { margin: 0; color: var(--secondary); font-size: 0.875rem; line-height: 1.4; }
+.support p a { color: var(--accent); font-weight: 500; text-decoration: none; }
+.support-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.kofi {
+  display: inline-block; padding: 0.5rem 0.875rem; border-radius: var(--radius-control);
+  background: #72a4f2; color: #0b1a33; text-decoration: none;
+  font: 600 0.9375rem/1.25 system-ui, -apple-system, sans-serif; letter-spacing: -0.005em;
+  transition: transform 100ms ease-out, filter 100ms ease-out;
+}
+.kofi:active { transform: scale(0.97); filter: brightness(0.9); }
+.kofi:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--focus); }
+@media (hover: hover) { .kofi:hover { filter: brightness(1.06); } }
+button.close { width: 2.25rem; padding: 0.5rem 0; font-size: 1.125rem; line-height: 1.1; color: var(--secondary); }
+
 /* --- Campi --- */
 label { display: block; font-size: 0.8125rem; line-height: 1.35; font-weight: 500; letter-spacing: 0.01em; color: var(--secondary); }
 select, input, textarea {

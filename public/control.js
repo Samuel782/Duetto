@@ -356,7 +356,29 @@ function renderStatus() {
   $('banner').hidden = !banner;
   $('banner').textContent = banner;
   $('banner').className = bannerWarn ? 'warn' : '';
+  renderSupport();
 }
+
+// --- Invito a sostenere Duetto ---
+// Compare all'apertura e sparisce per sempre, in questa sessione, appena i sottotitoli partono:
+// durante un evento la regia deve mostrare solo ciò che serve.
+
+const SUPPORT_KEY = 'duetto.supportHiddenUntil';
+const SUPPORT_SNOOZE_MS = 30 * 24 * 60 * 60 * 1000;
+let supportDismissed = Number(safeStore.get(SUPPORT_KEY)) > Date.now();
+
+function renderSupport() {
+  const busy = lastStatus && (lastStatus.aai.state !== 'idle' || lastStatus.demo);
+  if (busy) supportDismissed = true;
+  $('support').hidden = supportDismissed || !lastStatus;
+}
+
+$('supportClose').onclick = () => { supportDismissed = true; renderSupport(); };
+$('supportSnooze').onclick = () => {
+  safeStore.set(SUPPORT_KEY, String(Date.now() + SUPPORT_SNOOZE_MS));
+  supportDismissed = true;
+  renderSupport();
+};
 
 // --- Pannello di stile, generato dallo schema del server ---
 
