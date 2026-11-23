@@ -1,7 +1,7 @@
 {
   "name": "duetto",
   "productName": "Duetto",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Sottotitoli live in più lingue per dirette e maxischermi",
   "author": "Samuel Luggeri",
   "type": "module",
