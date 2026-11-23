@@ -8,7 +8,9 @@ const TIMEOUT_MS = 3000;
 const MAX_IN_FLIGHT = 6; // coda limitata: se DeepL è bloccato non si accumula nulla
 const USAGE_EVERY_MS = 60000;
 const GLOSSARY_NAME = 'duetto';
-const GLOSSARY_PAIRS = new Set(['it>en', 'en>it']);
+// Il glossario (colonne italiano e inglese del CSV) vale in queste direzioni, e solo in queste si usa.
+const GLOSSARY_DIRECTIONS = [{ from: 'it', to: 'en', cols: [0, 1] }, { from: 'en', to: 'it', cols: [1, 0] }];
+const GLOSSARY_PAIRS = new Set(GLOSSARY_DIRECTIONS.map((d) => `${d.from}>${d.to}`));
 
 // Le chiavi dei piani gratuiti finiscono con ":fx" e usano un indirizzo diverso.
 const endpointForKey = (key) => ((key || '').endsWith(':fx') ? 'https://api-free.deepl.com' : 'https://api.deepl.com');
@@ -227,10 +229,9 @@ export class DeepL {
         signal: AbortSignal.timeout(8000),
         body: JSON.stringify({
           name: GLOSSARY_NAME,
-          dictionaries: [
-            { source_lang: 'it', target_lang: 'en', entries: toTsv(0, 1), entries_format: 'tsv' },
-            { source_lang: 'en', target_lang: 'it', entries: toTsv(1, 0), entries_format: 'tsv' },
-          ],
+          dictionaries: GLOSSARY_DIRECTIONS.map((d) => ({
+            source_lang: d.from, target_lang: d.to, entries: toTsv(...d.cols), entries_format: 'tsv',
+          })),
         }),
       });
       if (!res.ok) {

@@ -8,12 +8,15 @@ import { WebSocketServer } from 'ws';
 import { AssemblyLink, testAssemblyKey } from './assemblyai.js';
 import { DeepL } from './deepl.js';
 import {
-  englishDictionary, language, resolveLanguage as resolveUiLanguage, setLanguage, t,
+  englishDictionary, language, locale, resolveLanguage as resolveUiLanguage, setLanguage, t,
 } from './i18n.js';
 import { log, warn } from './log.js';
-import { Settings, keysEncrypted, maskKey, readTextFile, writeTextFile } from './settings.js';
 import {
-  DEFAULT_STYLES, OUTPUTS, STYLE_SCHEMA, Store, VIEWS, normalizeMode, sanitizeLanguages, sanitizePresets, sanitizeStyle,
+  ASSEMBLY_URLS, Settings, keysEncrypted, maskKey, readTextFile, writeTextFile,
+} from './settings.js';
+import {
+  DEFAULT_STYLES, OUTPUTS, STYLE_SCHEMA, Store, VIEWS, normalizeMode, pickCaptionsTarget, pickTarget,
+  sanitizeLanguages, sanitizePresets, sanitizeStyle,
 } from './store.js';
 import {
   LANGUAGES, MAX_SPOKEN, MAX_TARGETS, codeFromDetected, effectiveTarget,
@@ -67,12 +70,7 @@ const cleanProfanity = () => settings.values.cleanProfanity ?? flag(env.CLEAN_PR
 // Lingua dell'interfaccia: scelta nelle Impostazioni, oppure quella del sistema.
 const applyLanguage = () => setLanguage(resolveUiLanguage(settings.values.uiLanguage, env.DUETTO_LOCALE || env.LANG || ''));
 applyLanguage();
-// Server AssemblyAI: il più vicino (Stati Uniti o Europa) oppure solo Unione Europea, per il GDPR.
-// L'indirizzo nel file .env, usato anche dai test, ha la precedenza.
-const ASSEMBLY_URLS = {
-  auto: 'wss://streaming.assemblyai.com/v3/ws',
-  eu: 'wss://streaming.eu.assemblyai.com/v3/ws',
-};
+// Server AssemblyAI scelto nelle Impostazioni. L'indirizzo nel file .env, usato anche dai test, ha la precedenza.
 const assemblyUrl = () => env.ASSEMBLYAI_WS_URL || ASSEMBLY_URLS[settings.values.assemblyaiRegion] || ASSEMBLY_URLS.auto;
 
 let clean = createCleaner({ fillers: cleanFillers(), profanity: cleanProfanity() });
@@ -148,17 +146,16 @@ setInterval(() => {
 
 // --- Lingue ---
 
-const languages = () => state.languages;
+// La lingua in cui un'uscita mostra la traduzione di una frase detta in "lang".
+const outputTarget = (out, lang) => effectiveTarget(lang, state.outputs[out].target, state.languages.targets);
 
 // Le lingue in onda per una frase detta in "lang": una per ogni uscita che mostra la traduzione,
 // più quella dei sottotitoli nativi se OBS li sta trasmettendo. Solo queste vengono tradotte.
 function targetsOnAir(lang) {
-  const { targets } = languages();
   const wanted = new Set();
   for (const out of OUTPUTS) {
-    const profile = state.outputs[out];
-    if (profile.view === 'original') continue;
-    const code = effectiveTarget(lang, profile.target, targets);
+    if (state.outputs[out].view === 'original') continue;
+    const code = outputTarget(out, lang);
     if (code) wanted.add(code);
   }
   const captions = captionsLanguage(lang);
@@ -168,8 +165,7 @@ function targetsOnAir(lang) {
 
 // Lingua dei sottotitoli nativi per una frase: '' se non vanno mandati.
 function captionsLanguage(lang) {
-  const status = obs.status();
-  if (status.state !== 'connected' || !status.streaming) return '';
+  if (!obs.status().live) return '';
   // Una sola lingua: se chi parla la usa già, passa l'originale.
   return state.captionsTarget === 'original' ? lang : state.captionsTarget;
 }
@@ -183,7 +179,7 @@ let writeTail = Promise.resolve(); // mantiene l'ordine delle frasi nei file
 const isShortText = (text) => text.trim().split(/\s+/).length <= 2;
 
 function resolveLanguage(sentence) {
-  const { spoken } = languages();
+  const { spoken } = state.languages;
   if (sentence.mode !== 'AUTO' && spoken.includes(sentence.mode)) return sentence.mode;
   const detected = codeFromDetected(sentence.detected);
   const valid = spoken.includes(detected) ? detected : '';
@@ -206,7 +202,7 @@ link.on('partial', (text, continuation) => {
 // legge l'originale.
 function sendTranslations(id, lang, translations) {
   for (const out of OUTPUTS) {
-    const code = effectiveTarget(lang, state.outputs[out].target, languages().targets);
+    const code = outputTarget(out, lang);
     const text = code && translations[code];
     broadcast(text ? { t: 'translation', id, text, lang: code } : { t: 'translationFailed', id }, out);
   }
@@ -223,7 +219,7 @@ link.on('final', (sentence) => {
   // In AUTO la lingua la conferma DeepL, frase per frase: quella di AssemblyAI è solo un'ipotesi, che
   // sbaglia soprattutto ai cambi di lingua. Una seconda richiesta serve solo se l'ipotesi è errata.
   // Una frase di una o due parole non basta a rilevarla e non cambia la lingua corrente.
-  const detect = sentence.mode === 'AUTO' && !isShort && languages().spoken.length > 1;
+  const detect = sentence.mode === 'AUTO' && !isShort && state.languages.spoken.length > 1;
 
   const id = ++sentenceSeq;
   const endAt = Date.now();
@@ -231,7 +227,7 @@ link.on('final', (sentence) => {
 
   const context = previous.lang === guess ? previous.text : '';
   const translated = deepl.translate(text, {
-    lang: guess, targetsFor: targetsOnAir, context, detect, accept: languages().spoken,
+    lang: guess, targetsFor: targetsOnAir, context, detect, accept: state.languages.spoken,
   }).catch(() => null);
 
   // Le traduzioni arrivano in parallelo ma escono nell'ordine in cui le frasi sono state dette.
@@ -256,13 +252,25 @@ link.on('final', (sentence) => {
 });
 
 // --- Modalità demo: testo finto, nessun credito consumato, nessun file scritto ---
-// Le frasi sono in italiano e in inglese: un'uscita impostata su un'altra lingua mostra l'originale.
+// Le frasi hanno il testo in italiano e in inglese: un'uscita impostata su un'altra lingua mostra l'originale.
 
 const DEMO_LINES = [
-  ['it', 'Buongiorno a tutti e benvenuti alla prima sessione della giornata.', 'Good morning everyone and welcome to the first session of the day.'],
-  ['en', 'Thank you very much for having me here today.', 'Grazie mille per avermi invitato qui oggi.'],
-  ['it', 'Vorrei iniziare con una domanda semplice sul futuro del nostro settore.', 'I would like to start with a simple question about the future of our industry.'],
-  ['en', 'The numbers show a clear trend over the last five years, and it is not slowing down.', 'I numeri mostrano una chiara tendenza negli ultimi cinque anni, e non sta rallentando.'],
+  ['it', {
+    it: 'Buongiorno a tutti e benvenuti alla prima sessione della giornata.',
+    en: 'Good morning everyone and welcome to the first session of the day.',
+  }],
+  ['en', {
+    en: 'Thank you very much for having me here today.',
+    it: 'Grazie mille per avermi invitato qui oggi.',
+  }],
+  ['it', {
+    it: 'Vorrei iniziare con una domanda semplice sul futuro del nostro settore.',
+    en: 'I would like to start with a simple question about the future of our industry.',
+  }],
+  ['en', {
+    en: 'The numbers show a clear trend over the last five years, and it is not slowing down.',
+    it: 'I numeri mostrano una chiara tendenza negli ultimi cinque anni, e non sta rallentando.',
+  }],
 ];
 let demoTimer = null;
 
@@ -272,7 +280,8 @@ function startDemo() {
   let line = 0;
   let word = 0;
   const step = () => {
-    const [lang, text, translation] = DEMO_LINES[line];
+    const [lang, texts] = DEMO_LINES[line];
+    const text = texts[lang];
     const words = text.split(' ');
     word += 1;
     if (word < words.length) {
@@ -283,7 +292,7 @@ function startDemo() {
     const id = ++sentenceSeq;
     broadcast({ t: 'final', id, text, lang });
     demoTimer = setTimeout(() => {
-      sendTranslations(id, lang, { [lang === 'it' ? 'en' : 'it']: translation });
+      sendTranslations(id, lang, texts);
       line = (line + 1) % DEMO_LINES.length;
       word = 0;
       demoTimer = setTimeout(step, 1800);
@@ -351,9 +360,10 @@ function setLanguages(input) {
   if (state.languageMode !== 'AUTO' && !next.spoken.includes(state.languageMode)) state.languageMode = 'AUTO';
   if (!next.spoken.includes(state.lastLanguage)) state.lastLanguage = null;
   for (const out of OUTPUTS) {
-    if (!next.targets.includes(state.outputs[out].target)) setProfile(out, { target: next.targets[0] });
+    const target = pickTarget(state.outputs[out].target, next.targets);
+    if (target !== state.outputs[out].target) setProfile(out, { target });
   }
-  if (state.captionsTarget !== 'original' && !next.targets.includes(state.captionsTarget)) state.captionsTarget = next.targets[0];
+  state.captionsTarget = pickCaptionsTarget(state.captionsTarget, next.targets);
   link.setLanguages({ mode: state.languageMode, spoken: next.spoken });
   const note = `Lingue: parlate ${next.spoken.join(', ')}; traduzioni ${next.targets.join(', ')}`;
   transcript.note(note);
@@ -368,10 +378,11 @@ function setProfile(out, change) {
 
 const commands = {
   language: (m) => setLanguageMode(m.mode),
-  languages: (m) => setLanguages({ spoken: m.spoken, targets: m.targets }),
+  // Le chip mandano una sola lista: l'altra resta com'è.
+  languages: (m) => setLanguages({ spoken: m.spoken ?? state.languages.spoken, targets: m.targets ?? state.languages.targets }),
   target: (m) => { if (state.languages.targets.includes(m.lang)) setProfile(m.out, { target: m.lang }); },
   captionsTarget: (m) => {
-    if (m.lang === 'original' || state.languages.targets.includes(m.lang)) state.captionsTarget = m.lang;
+    if (pickCaptionsTarget(m.lang, state.languages.targets) === m.lang) state.captionsTarget = m.lang;
   },
   view: (m) => { if (VIEWS.includes(m.view)) setProfile(m.out, { view: m.view }); },
   viewAll: (m) => { if (VIEWS.includes(m.view)) OUTPUTS.forEach((out) => setProfile(out, { view: m.view })); },
@@ -410,7 +421,7 @@ function settingsMessage() {
     obsEnabled: settings.values.obsEnabled,
     obsHost: settings.values.obsHost,
     obsPort: settings.values.obsPort,
-    obsPassword: settings.values.obsPassword ? maskKey(settings.values.obsPassword) : '',
+    obsPassword: maskKey(settings.values.obsPassword),
     keysEncrypted: keysEncrypted(),
     keyterms: readTextFile(KEYTERMS_FILE),
     glossary: readTextFile(GLOSSARY_FILE),
@@ -419,9 +430,11 @@ function settingsMessage() {
 
 async function saveSettings(ws, m) {
   const before = language();
+  const checkedUpdates = settings.values.checkUpdates;
   const saved = settings.update(m);
   applyLanguage();
-  refreshUpdate();
+  // GitHub si interroga all'avvio, e di nuovo solo se il controllo cambia.
+  if (settings.values.checkUpdates !== checkedUpdates) refreshUpdate();
   // Le pagine aperte si ricaricano nella nuova lingua: la regia solo se non sta inviando audio.
   if (language() !== before) sendControl({ t: 'language', lang: language() });
   link.setApiKey(assemblyKey());
@@ -519,7 +532,8 @@ function serveFile(res, [name, type]) {
     res.writeHead(200, { 'Content-Type': `${type}; charset=utf-8`, 'Cache-Control': 'no-store' });
     // Le traduzioni arrivano con lo script stesso: la pagina appare subito nella lingua giusta.
     if (name === 'i18n.js') {
-      const head = `window.DUETTO_LANG = ${JSON.stringify(language())};\nwindow.DUETTO_DICT = ${language() === 'en' ? JSON.stringify(englishDictionary()) : '{}'};\n`;
+      const head = `window.DUETTO_LANG = ${JSON.stringify(language())};\n` +
+        `window.DUETTO_LOCALE = ${JSON.stringify(locale())};\nwindow.DUETTO_DICT = ${language() === 'en' ? JSON.stringify(englishDictionary()) : '{}'};\n`;
       res.end(head + content);
       return;
     }

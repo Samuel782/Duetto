@@ -1,5 +1,5 @@
 // Traduzione delle pagine. Il server antepone a questo file la lingua scelta e il dizionario:
-// window.DUETTO_LANG e window.DUETTO_DICT. I testi italiani nell'HTML e nel codice fanno da chiave.
+// window.DUETTO_LANG, window.DUETTO_LOCALE e window.DUETTO_DICT. I testi italiani nell'HTML e nel codice fanno da chiave.
 (() => {
   const lang = window.DUETTO_LANG === 'en' ? 'en' : 'it';
   const dict = lang === 'en' ? (window.DUETTO_DICT || {}) : {};
@@ -30,9 +30,8 @@
   if (dict[document.title]) document.title = dict[document.title];
   window.I18N = {
     lang,
-    locale: lang === 'en' ? 'en-GB' : 'it-IT',
+    locale: window.DUETTO_LOCALE || 'it-IT',
     t,
-    translateTree,
   };
   // Lo script è in fondo alla pagina: il contenuto statico è già presente.
   translateTree(document.body);

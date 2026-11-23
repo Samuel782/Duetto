@@ -2,7 +2,6 @@
 // OBS 28 e successivi) e OBS lo inserisce nello streaming come sottotitoli CEA-608, che YouTube e
 // Twitch mostrano come sottotitoli attivabili dallo spettatore.
 import crypto from 'node:crypto';
-import { EventEmitter } from 'node:events';
 import WebSocket from 'ws';
 import { t } from './i18n.js';
 import { log, warn } from './log.js';
@@ -35,9 +34,8 @@ export function obsAuth(password, salt, challenge) {
   return hash(hash(password + salt) + challenge);
 }
 
-export class ObsCaptions extends EventEmitter {
+export class ObsCaptions {
   constructor() {
-    super();
     this.cfg = { enabled: false, host: '127.0.0.1', port: 4455, password: '' };
     this.ws = null;
     this.state = 'off'; // off, connecting, connected
@@ -62,12 +60,15 @@ export class ObsCaptions extends EventEmitter {
   }
 
   status() {
-    return { enabled: this.cfg.enabled, state: this.state, streaming: this.streaming, lastError: this.lastError, sent: this.sent };
+    return {
+      enabled: this.cfg.enabled, state: this.state, streaming: this.streaming,
+      live: this.state === 'connected' && this.streaming, lastError: this.lastError, sent: this.sent,
+    };
   }
 
   // Aggiunge una frase ai sottotitoli. Parte solo se OBS è collegato e in diretta.
   push(text) {
-    if (this.state !== 'connected' || !this.streaming || !text) return;
+    if (!this.status().live || !text) return;
     this.queue.push(...captionChunks(text));
     if (this.queue.length > MAX_QUEUE) this.queue.splice(0, this.queue.length - MAX_QUEUE);
     this._sendNext();
@@ -116,12 +117,11 @@ export class ObsCaptions extends EventEmitter {
       else if (reason?.length && !this.lastError) this.lastError = reason.toString();
       if (this.state === 'connected') warn(`OBS: collegamento perso (${code})`);
       this.ws = null;
-      this.state = 'connecting';
+      this.state = code === 4009 ? 'off' : 'connecting';
       this.streaming = false;
       this._failPending();
       clearInterval(this.statusTimer);
       if (code !== 4009) this._scheduleRetry();
-      else this.state = 'off';
     });
   }
 
@@ -147,12 +147,12 @@ export class ObsCaptions extends EventEmitter {
   }
 
   async _refreshStreaming() {
-    const res = await this._request('GetStreamStatus', {}, true);
+    const res = await this._request('GetStreamStatus', {});
     this.streaming = !!res?.outputActive;
   }
 
-  // Invia una richiesta. Restituisce true o i dati della risposta se riuscita, altrimenti null.
-  _request(type, data, wantData = false) {
+  // Invia una richiesta. Restituisce i dati della risposta se riuscita, altrimenti null.
+  _request(type, data) {
     const ws = this.ws;
     if (!ws || ws.readyState !== WebSocket.OPEN || this.state !== 'connected') return Promise.resolve(null);
     const requestId = String(++this.nextId);
@@ -165,7 +165,7 @@ export class ObsCaptions extends EventEmitter {
           resolve(null);
           return;
         }
-        resolve(wantData ? (d.responseData || {}) : true);
+        resolve(d.responseData || {});
       });
       ws.send(JSON.stringify({ op: 6, d: { requestType: type, requestId, requestData: data } }));
     });

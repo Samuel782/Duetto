@@ -276,8 +276,9 @@ function toggleLanguage(kind, code) {
   if (at >= 0) { if (list.length > 1) list.splice(at, 1); } else if (list.length < limits[kind]) list.push(code);
   send({ cmd: 'languages', [kind]: list });
 }
-$('spokenChips').addEventListener('click', (e) => { const code = e.target.closest('button')?.dataset.code; if (code) toggleLanguage('spoken', code); });
-$('targetChips').addEventListener('click', (e) => { const code = e.target.closest('button')?.dataset.code; if (code) toggleLanguage('targets', code); });
+for (const [id, kind] of [['spokenChips', 'spoken'], ['targetChips', 'targets']]) {
+  $(id).addEventListener('click', (e) => { const code = e.target.closest('button')?.dataset.code; if (code) toggleLanguage(kind, code); });
+}
 
 // Lingua successiva tra quelle dell'evento, dopo AUTO.
 function nextMode() {
@@ -340,7 +341,11 @@ function renderLanguages() {
   }
   modes.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.mode === appState.languageMode));
 
+  // Si ricostruiscono solo se le lingue sono cambiate: lo stato arriva anche a ogni ritocco di stile.
   const chips = (root, kind, list) => {
+    const key = `${catalog.length}:${list.join()}`;
+    if (root.dataset.key === key) return;
+    root.dataset.key = key;
     const available = catalog.filter((l) => kind === 'targets' || l.spoken);
     root.replaceChildren(...available.map((l) => {
       const b = document.createElement('button');
@@ -427,7 +432,7 @@ function renderStatus() {
     if (deepl.lastError) add(t('Errore DeepL'), deepl.lastError, 'st-bad');
     add(t('Glossario'), deepl.glossary);
     const obs = lastStatus.obs;
-    if (obs?.enabled) add(t('Sottotitoli OBS'), obsText(obs), obs.state === 'connected' && obs.streaming ? 'st-ok' : 'st-warn');
+    if (obs?.enabled) add(t('Sottotitoli OBS'), obsText(obs), obs.live ? 'st-ok' : 'st-warn');
     renderCaptions(obs);
     add(t('Ore di sessione'), fmtHours(aai.billedSeconds));
     add(t('Crediti stimati'), `$${aai.estimatedCost.toFixed(2)}`);
@@ -465,7 +470,7 @@ function renderCaptions(obs) {
   const note = $('captionsNote');
   if (!obs?.enabled) note.textContent = t('Disattivati: si attivano nelle Impostazioni.');
   else note.textContent = `OBS: ${obsText(obs)}`;
-  note.className = `note ${obs?.enabled && !(obs.state === 'connected' && obs.streaming) ? 'warn' : ''}`;
+  note.className = `note ${obs?.enabled && !obs.live ? 'warn' : ''}`;
 }
 
 // --- Invito a sostenere Duetto ---

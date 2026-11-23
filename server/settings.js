@@ -12,7 +12,12 @@ const DEFAULTS = {
   assemblyaiApiKey: '', deeplApiKey: '', assemblyaiRegion: 'auto', uiLanguage: 'auto', checkUpdates: true, cleanFillers: null, cleanProfanity: null,
   obsEnabled: false, obsHost: '127.0.0.1', obsPort: 4455, obsPassword: '',
 };
-export const REGIONS = ['auto', 'eu'];
+// Server AssemblyAI: il più vicino (Stati Uniti o Europa) oppure solo Unione Europea, per il GDPR.
+export const ASSEMBLY_URLS = {
+  auto: 'wss://streaming.assemblyai.com/v3/ws',
+  eu: 'wss://streaming.eu.assemblyai.com/v3/ws',
+};
+const REGIONS = Object.keys(ASSEMBLY_URLS);
 const ENCRYPTED = 'enc:v1:';
 
 // Cifratura fornita dall'app desktop prima di caricare il server. Senza, le chiavi restano in chiaro

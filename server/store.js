@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  MAX_SPOKEN, MAX_TARGETS, cleanCodes, isSpoken, isTarget,
+  MAX_SPOKEN, MAX_TARGETS, cleanCodes, isCaptionTarget, isSpoken, isTarget,
 } from './languages.js';
 import { warn } from './log.js';
 
@@ -18,7 +18,7 @@ export function normalizeMode(mode, spoken) {
   return spoken.includes(code) ? code : '';
 }
 
-const DEFAULT_SPOKEN = ['it', 'en'];
+export const DEFAULT_SPOKEN = ['it', 'en'];
 const DEFAULT_TARGETS = ['en', 'it'];
 
 // Lingue dell'evento: in quali si può parlare e in quali si traduce. Mai vuote.
@@ -26,6 +26,15 @@ export function sanitizeLanguages(input = {}) {
   const spoken = cleanCodes(input.spoken, isSpoken, MAX_SPOKEN);
   const targets = cleanCodes(input.targets, isTarget, MAX_TARGETS);
   return { spoken: spoken.length ? spoken : [...DEFAULT_SPOKEN], targets: targets.length ? targets : [...DEFAULT_TARGETS] };
+}
+
+// Lingua di un'uscita: una delle lingue di destinazione, altrimenti la prima.
+export const pickTarget = (code, targets) => (targets.includes(code) ? code : targets[0]);
+
+// Lingua dei sottotitoli nativi: l'originale, oppure una lingua di destinazione in alfabeto latino.
+export function pickCaptionsTarget(code, targets) {
+  if (code === 'original' || (targets.includes(code) && isCaptionTarget(code))) return code;
+  return targets.find(isCaptionTarget) || 'original';
 }
 
 const num = (key, label, min, max, step = 1) => ({ key, label, type: 'number', min, max, step });
@@ -172,8 +181,7 @@ export class Store {
       languages,
       lastLanguage: languages.spoken.includes(data.lastLanguage) ? data.lastLanguage : null,
       // Lingua dei sottotitoli nativi della diretta: una lingua di destinazione, oppure l'originale.
-      captionsTarget: data.captionsTarget === 'original' || languages.targets.includes(data.captionsTarget)
-        ? data.captionsTarget : languages.targets[0],
+      captionsTarget: pickCaptionsTarget(data.captionsTarget, languages.targets),
       presets: sanitizePresets(data.presets),
       outputs: {},
     };
@@ -183,7 +191,7 @@ export class Store {
         view: VIEWS.includes(saved.view) ? saved.view : 'both',
         hidden: saved.hidden === true,
         // In quale lingua tradurre per questa uscita.
-        target: languages.targets.includes(saved.target) ? saved.target : languages.targets[0],
+        target: pickTarget(saved.target, languages.targets),
         style: { ...DEFAULT_STYLES[out], ...sanitizeSavedStyle(saved.style) },
       };
     }
