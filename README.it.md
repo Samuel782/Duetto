@@ -35,6 +35,8 @@ Scaricalo dalla pagina [Releases](https://github.com/Samuel782/Duetto/releases),
 
 Le chiavi restano sul tuo computer, cifrate con il portachiavi del sistema, e così i file dei sottotitoli. Mentre Duetto è in funzione, l'audio va ad AssemblyAI e il testo a DeepL: avvisa relatori e partecipanti se l'evento lo richiede. Se i dati devono restare in Europa, scegli **Solo Unione Europea** nelle Impostazioni: AssemblyAI elaborerà l'audio sui suoi server europei.
 
+I sottotitoli si vedono solo sul computer che usa Duetto, salvo permettere altri dispositivi della rete nelle Impostazioni. Si possono spegnere anche i file salvati. I dettagli sono in [PRIVACY.it.md](PRIVACY.it.md); per segnalare una vulnerabilità, [SECURITY.md](SECURITY.md). I sottotitoli sono automatici e possono contenere errori: non affidarti solo a loro dove uno sbaglio può causare danni. Nelle Impostazioni puoi mostrare al pubblico un avviso che sono generati con AI.
+
 ## Gratis per te, a pagamento per lavoro
 
 Duetto è **gratuito per uso non commerciale**: progetti personali, studio, scuole, associazioni senza scopo di lucro ed enti pubblici. Il codice è pubblico: puoi leggerlo, provarlo e modificarlo.
@@ -70,4 +72,4 @@ test/       test automatici e servizi finti
 
 ## Licenza
 
-[PolyForm Noncommercial 1.0.0](LICENSE). Le versioni fino alla 1.1.0 sono state distribuite con licenza MIT e restano tali. AssemblyAI e DeepL sono servizi di terze parti con i propri termini e costi.
+[PolyForm Noncommercial 1.0.0](LICENSE). Le versioni fino alla 1.1.0 sono state distribuite con licenza MIT e restano tali. AssemblyAI e DeepL sono servizi di terze parti con i propri termini e costi. Il software incluso è elencato in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

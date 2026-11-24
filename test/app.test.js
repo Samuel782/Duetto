@@ -517,6 +517,8 @@ test('aggiornamenti: confronto versioni e risposta di GitHub', async () => {
   assert.equal(isNewer('v1.2.0', '1.2.0'), false);
   assert.equal(isNewer('1.1.9', '1.2.0'), false);
   assert.equal(isNewer('2.0', '1.9.9'), true);
+  assert.equal(isNewer('Duetto_1.2.2', '1.2.1'), true);
+  assert.equal(isNewer('Duetto_1.2.1', '1.2.1'), false);
 
   let release = { tag_name: 'v1.3.0', html_url: 'https://github.com/Samuel782/Duetto/releases/tag/v1.3.0' };
   const server = http.createServer((req, res) => {
@@ -538,6 +540,59 @@ test('aggiornamenti: confronto versioni e risposta di GitHub', async () => {
     server.close();
   }
   assert.equal(await checkForUpdate('1.2.0', 'http://127.0.0.1:1/chiuso'), null, 'senza rete: nessun avviso');
+});
+
+test('privacy: file disattivabili e sottotitoli chiusi alla rete', async () => {
+  ctx = await setup({ HOST: '0.0.0.0' });
+  const lan = Object.values(os.networkInterfaces()).flat().find((i) => i && i.family === 'IPv4' && !i.internal)?.address;
+  const open = (p) => new Promise((resolve, reject) => {
+    const req = http.get({ host: lan, port: ctx.port, path: p, agent: false }, resolve);
+    req.on('error', reject);
+  });
+  const status = async (p) => { const res = await open(p); res.destroy(); return res.statusCode; };
+  const save = async (m) => {
+    const before = ctx.messages.length;
+    ctx.cmd({ cmd: 'settingsSave', ...m });
+    await waitFor(() => ctx.messages.slice(before).some((x) => x.t === 'settingsResult'), 8000, 'salvataggio');
+  };
+  const links = () => ctx.messages.filter((m) => m.t === 'links').at(-1).links;
+  const schema = await waitFor(() => ctx.messages.find((m) => m.t === 'schema'), 3000, 'schema');
+  assert.equal(schema.links.network.length, 0);
+  if (lan) {
+    for (const p of ['/overlay', '/overlay.js', '/events?out=room']) assert.equal(await status(p), 403, p);
+    await save({ overlayLan: true });
+    assert.ok(links().network.length > 0);
+    const res = await open('/events?out=room');
+    assert.equal(res.statusCode, 200);
+    let closed = false;
+    res.on('close', () => { closed = true; }).on('error', () => {}).resume();
+    assert.equal(await status('/control'), 403, 'la regia resta chiusa');
+    await save({ overlayLan: false });
+    await waitFor(() => closed, 3000, 'collegamento remoto chiuso');
+    assert.equal(await status('/overlay'), 403);
+    assert.equal(links().network.length, 0);
+  }
+  await save({ saveFiles: false });
+  ctx.startAudio();
+  await waitFor(() => ctx.events.some((e) => e.t === 'translation'), 15000, 'traduzione');
+  ctx.stopAudio();
+  await sleep(500);
+  assert.ok(!fs.existsSync(path.join(ctx.tmp, 'output')), 'nessun file scritto');
+});
+
+test('avviso AI: spento, predefinito nella lingua dell\'uscita, personalizzato', async () => {
+  ctx = await setup();
+  const notice = () => ctx.events.filter((e) => e.t === 'profile').at(-1)?.notice;
+  await waitFor(() => notice() !== undefined, 3000, 'profilo');
+  assert.equal(notice(), '');
+  ctx.cmd({ cmd: 'settingsSave', aiNotice: true });
+  await waitFor(() => /^AI-generated/.test(notice()), 5000, 'avviso in inglese');
+  ctx.cmd({ cmd: 'target', out: 'stream', lang: 'it' });
+  await waitFor(() => /^Sottotitoli/.test(notice()), 5000, 'avviso in italiano');
+  ctx.cmd({ cmd: 'settingsSave', aiNoticeText: `  ${'x'.repeat(300)}` });
+  await waitFor(() => notice() === 'x'.repeat(160), 5000, 'testo personalizzato');
+  ctx.cmd({ cmd: 'settingsSave', aiNotice: false });
+  await waitFor(() => notice() === '', 5000, 'avviso spento');
 });
 
 test('più lingue: ogni uscita nella sua lingua, traduce solo ciò che va in onda', async () => {

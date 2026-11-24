@@ -5,11 +5,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { UI_LANGUAGES } from './i18n.js';
+import { MAX_NOTICE } from './notice.js';
 import { warn } from './log.js';
 
 const KEYS = ['assemblyaiApiKey', 'deeplApiKey', 'obsPassword']; // segreti: cifrati su disco
 const DEFAULTS = {
-  assemblyaiApiKey: '', deeplApiKey: '', assemblyaiRegion: 'auto', uiLanguage: 'auto', checkUpdates: true, cleanFillers: null, cleanProfanity: null,
+  assemblyaiApiKey: '', deeplApiKey: '', assemblyaiRegion: 'auto', uiLanguage: 'auto', checkUpdates: true, saveFiles: true, overlayLan: false, aiNotice: false, aiNoticeText: '', cleanFillers: null, cleanProfanity: null,
   obsEnabled: false, obsHost: '127.0.0.1', obsPort: 4455, obsPassword: '',
 };
 // Server AssemblyAI: il più vicino (Stati Uniti o Europa) oppure solo Unione Europea, per il GDPR.
@@ -76,9 +77,10 @@ export class Settings {
       // Campo vuoto: la chiave già salvata resta com'è.
       if (typeof change[key] === 'string' && change[key].trim()) this.values[key] = change[key].trim();
     }
-    for (const key of ['cleanFillers', 'cleanProfanity', 'checkUpdates', 'obsEnabled']) {
+    for (const key of ['cleanFillers', 'cleanProfanity', 'checkUpdates', 'saveFiles', 'overlayLan', 'aiNotice', 'obsEnabled']) {
       if (typeof change[key] === 'boolean') this.values[key] = change[key];
     }
+    if (typeof change.aiNoticeText === 'string') this.values.aiNoticeText = change.aiNoticeText.trim().slice(0, MAX_NOTICE);
     if (REGIONS.includes(change.assemblyaiRegion)) this.values.assemblyaiRegion = change.assemblyaiRegion;
     if (UI_LANGUAGES.includes(change.uiLanguage)) this.values.uiLanguage = change.uiLanguage;
     // OBS gira sullo stesso computer o in rete locale: basta un nome o un indirizzo semplice.

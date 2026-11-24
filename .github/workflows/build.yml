@@ -45,6 +45,9 @@ jobs:
       - name: Windows
         run: npx electron-builder --win --publish never
 
+      - name: Elenco dei componenti (SBOM)
+        run: npm run sbom
+
       # Controlla che l'icona adattiva sia davvero dentro l'app.
       - name: Verifica icona
         run: |
@@ -58,5 +61,6 @@ jobs:
           path: |
             dist/*.dmg
             dist/*.zip
+            dist/*.cdx.json
           if-no-files-found: error
           retention-days: 30

@@ -76,6 +76,23 @@
   </section>
 
   <section class="card">
+    <h2>Privacy</h2>
+    <label class="check"><input id="saveFiles" type="checkbox"> Salva trascrizione e file dei sottotitoli</label>
+    <p class="note">Restano su questo computer finché non li cancelli. Se spegni l'opzione, da quel momento non si scrive più nulla.</p>
+    <label class="check"><input id="overlayLan" type="checkbox"> Permetti ad altri dispositivi della rete di vedere i sottotitoli</label>
+    <p class="note">Serve se il maxischermo o OBS sono su un altro computer. Chiunque sia sulla stessa rete potrà leggerli.</p>
+    <p class="note">I sottotitoli sono automatici e possono contenere errori. Informa relatori e pubblico quando serve.</p>
+    <label class="check"><input id="aiNotice" type="checkbox"> Mostra al pubblico che i sottotitoli sono generati con AI</label>
+    <label class="field">Testo dell'avviso (vuoto: quello predefinito, nella lingua dell'uscita)
+      <input id="aiNoticeText" type="text" maxlength="160" autocomplete="off">
+    </label>
+    <p class="note">Resta visibile su streaming e sala, sul bordo opposto ai sottotitoli. Non compare nei sottotitoli mandati a OBS: lì scrivilo nella descrizione della diretta.</p>
+    <p class="note"><a id="privacyLink" href="https://github.com/Samuel782/Duetto/blob/main/PRIVACY.it.md" target="_blank" rel="noopener">Come Duetto tratta i dati</a></p>
+    <p class="note"><a href="https://github.com/Samuel782/Duetto/blob/main/LICENSE" target="_blank" rel="noopener">Licenza di Duetto</a></p>
+    <p class="note"><a href="https://github.com/Samuel782/Duetto/blob/main/THIRD-PARTY-NOTICES.md" target="_blank" rel="noopener">Software di terze parti</a></p>
+  </section>
+
+  <section class="card">
     <h2>Aggiornamenti</h2>
     <label class="check"><input id="checkUpdates" type="checkbox"> All'avvio controlla su GitHub se c'è una nuova versione</label>
     <p class="note">Solo un avviso nella regia, con il link per scaricarla. Non installa nulla da solo.</p>

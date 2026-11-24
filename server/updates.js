@@ -5,9 +5,12 @@ import { log } from './log.js';
 
 export const RELEASES_API = 'https://api.github.com/repos/Samuel782/Duetto/releases/latest';
 
-// Confronta versioni come 1.10.0 e 1.9.2, numero per numero. Ignora una "v" iniziale.
+// I tre numeri della versione, anche in un tag con un prefisso: "v1.2.1", "Duetto_1.2.1".
+const versionIn = (text) => /\d+(?:\.\d+)+/.exec(String(text))?.[0] || '';
+
+// Confronta versioni come 1.10.0 e 1.9.2, numero per numero.
 export function isNewer(candidate, current) {
-  const parts = (v) => String(v).replace(/^v/i, '').split(/[.-]/).slice(0, 3).map((n) => Number.parseInt(n, 10) || 0);
+  const parts = (v) => versionIn(v).split('.').slice(0, 3).map((n) => Number.parseInt(n, 10) || 0);
   const a = parts(candidate);
   const b = parts(current);
   for (let i = 0; i < 3; i++) {
@@ -29,7 +32,7 @@ export async function checkForUpdate(current, api = RELEASES_API) {
     }
     const release = await res.json();
     if (release.draft || release.prerelease || !release.tag_name) return null;
-    const version = String(release.tag_name).replace(/^v/i, '');
+    const version = versionIn(release.tag_name);
     if (!isNewer(version, current)) return null;
     const url = /^https:\/\/github\.com\//.test(release.html_url) ? release.html_url : 'https://github.com/Samuel782/Duetto/releases';
     log(`Aggiornamento disponibile: ${version}`);

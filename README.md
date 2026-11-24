@@ -35,6 +35,8 @@ Download it from the [Releases](https://github.com/Samuel782/Duetto/releases) pa
 
 The keys stay on your computer, encrypted with the system keychain, and so do the subtitle files. While Duetto is running, audio is sent to AssemblyAI and text to DeepL: let speakers and attendees know if the event requires it. If data must stay in Europe, choose **European Union only** in Settings and AssemblyAI will process the audio on its EU servers.
 
+Subtitles are visible only on the computer running Duetto, unless you allow other devices on the network in Settings. You can also turn off the saved files. Details in [PRIVACY.md](PRIVACY.md); to report a vulnerability, see [SECURITY.md](SECURITY.md). Subtitles are automatic and can contain mistakes: do not rely on them alone where an error could cause harm. In Settings you can show the audience a notice that they are AI-generated.
+
 ## Free for you, paid for work
 
 Duetto is **free for noncommercial use**: personal projects, study, schools, nonprofits and public bodies. The code is public, so you can read it, try it and change it.
@@ -70,4 +72,4 @@ test/       automated tests and fake services
 
 ## Licence
 
-[PolyForm Noncommercial 1.0.0](LICENSE). Version 1.1.0 and earlier were released under the MIT licence and remain so. AssemblyAI and DeepL are third-party services with their own terms and costs.
+[PolyForm Noncommercial 1.0.0](LICENSE). Version 1.1.0 and earlier were released under the MIT licence and remain so. AssemblyAI and DeepL are third-party services with their own terms and costs. Bundled software is listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

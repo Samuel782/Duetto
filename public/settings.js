@@ -24,6 +24,10 @@ function fill(m) {
   $('cleanFillers').checked = m.cleanFillers;
   $('cleanProfanity').checked = m.cleanProfanity;
   $('checkUpdates').checked = m.checkUpdates;
+  $('saveFiles').checked = m.saveFiles;
+  $('overlayLan').checked = m.overlayLan;
+  $('aiNotice').checked = m.aiNotice;
+  $('aiNoticeText').value = m.aiNoticeText;
   $('obsEnabled').checked = m.obsEnabled;
   $('obsHost').value = m.obsHost;
   $('obsPort').value = m.obsPort;
@@ -72,6 +76,10 @@ $('save').onclick = () => {
     cleanFillers: $('cleanFillers').checked,
     cleanProfanity: $('cleanProfanity').checked,
     checkUpdates: $('checkUpdates').checked,
+    saveFiles: $('saveFiles').checked,
+    overlayLan: $('overlayLan').checked,
+    aiNotice: $('aiNotice').checked,
+    aiNoticeText: $('aiNoticeText').value,
     obsEnabled: $('obsEnabled').checked,
     obsHost: $('obsHost').value,
     obsPort: Number($('obsPort').value),
@@ -80,5 +88,7 @@ $('save').onclick = () => {
     uiLanguage: $('uiLanguage').value,
   }));
 };
+
+if (I18N.lang === 'en') $('privacyLink').href = 'https://github.com/Samuel782/Duetto/blob/main/PRIVACY.md';
 
 connect();

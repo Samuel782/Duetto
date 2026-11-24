@@ -7,6 +7,8 @@ const stage = document.getElementById('stage');
 const box = document.getElementById('box');
 const originalEl = document.getElementById('original');
 const translationEl = document.getElementById('translation');
+const noticeEl = document.getElementById('notice');
+const noticeTextEl = noticeEl.firstElementChild;
 
 const MAX_KEPT_ORIGINALS = 20;
 const READING_CHARS_PER_SECOND = 22;
@@ -221,11 +223,21 @@ function applyStyle() {
   const fill = hexToRgba(s.bgColor, s.bgOpacity);
   box.style.background = s.bgMode === 'box' ? fill : 'transparent';
   box.style.padding = s.bgMode === 'box' ? '0.25em 0.6em' : '0';
+  applyNotice(s, fill);
   const preview = document.body.classList.contains('preview');
   if (s.bgMode === 'full') document.body.style.background = fill;
   else document.body.style.background = preview ? '' : 'transparent';
 
   stage.style.opacity = profile.hidden ? 0 : 1;
+}
+
+function applyNotice(s, fill) {
+  noticeTextEl.textContent = profile.notice || '';
+  noticeEl.style.display = profile.notice ? 'block' : 'none';
+  noticeEl.style.top = s.position === 'bottom' ? '40px' : 'auto';
+  noticeEl.style.bottom = s.position === 'bottom' ? 'auto' : '40px';
+  applyFont(noticeEl, s.fontTranslation, s.fontSourceTranslation, 400, 28, 'normal', s.colorTranslation);
+  noticeTextEl.style.background = s.bgMode === 'box' ? fill : 'transparent';
 }
 
 function fitStage() {

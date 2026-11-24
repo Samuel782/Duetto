@@ -21,6 +21,7 @@ import {
 import {
   LANGUAGES, MAX_SPOKEN, MAX_TARGETS, codeFromDetected, effectiveTarget,
 } from './languages.js';
+import { noticeText } from './notice.js';
 import { ObsCaptions } from './obs.js';
 import { createCleaner } from './textclean.js';
 import { Transcript } from './transcript.js';
@@ -39,6 +40,7 @@ const flag = (value, fallback) => (value === undefined || value === '' ? fallbac
 const PORT = Number(env.PORT) || 8787;
 const HOST = env.HOST || '0.0.0.0';
 const CONTROL_ALLOW_LAN = flag(env.CONTROL_ALLOW_LAN, false);
+const OVERLAY_ALLOW_LAN = flag(env.OVERLAY_ALLOW_LAN, false);
 const PRICE_PER_HOUR = Number(env.ASSEMBLYAI_PRICE_PER_HOUR) || 0.45;
 const DATA_DIR = env.DATA_DIR || path.join(ROOT, 'data');
 const OUTPUT_DIR = env.OUTPUT_DIR || path.join(ROOT, 'output');
@@ -49,6 +51,7 @@ const store = new Store(path.join(DATA_DIR, 'state.json'), env.DEFAULT_LANGUAGE_
 const state = store.state;
 const settings = new Settings(path.join(DATA_DIR, 'settings.json'));
 const transcript = new Transcript(OUTPUT_DIR);
+transcript.enabled = settings.values.saveFiles;
 const VERSION = env.DUETTO_VERSION || JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
 
 // Nuova versione su GitHub: solo nell'app desktop, se l'utente non l'ha disattivato.
@@ -138,7 +141,11 @@ function broadcast(payload, out = null) {
   for (const name of out ? [out] : OUTPUTS) for (const res of sseClients[name]) sendSse(res, payload);
 }
 
-const profileMessage = (out) => ({ t: 'profile', ...state.outputs[out] });
+const profileMessage = (out) => ({
+  t: 'profile',
+  ...state.outputs[out],
+  notice: noticeText(settings.values.aiNotice, settings.values.aiNoticeText, state.outputs[out].target),
+});
 
 setInterval(() => {
   for (const name of OUTPUTS) for (const res of sseClients[name]) res.write(': ping\n\n');
@@ -418,6 +425,10 @@ function settingsMessage() {
     assemblyaiRegion: settings.values.assemblyaiRegion,
     uiLanguage: settings.values.uiLanguage,
     checkUpdates: settings.values.checkUpdates,
+    saveFiles: settings.values.saveFiles,
+    overlayLan: overlayLan(),
+    aiNotice: settings.values.aiNotice,
+    aiNoticeText: settings.values.aiNoticeText,
     obsEnabled: settings.values.obsEnabled,
     obsHost: settings.values.obsHost,
     obsPort: settings.values.obsPort,
@@ -439,6 +450,10 @@ async function saveSettings(ws, m) {
   if (language() !== before) sendControl({ t: 'language', lang: language() });
   link.setApiKey(assemblyKey());
   link.cfg.url = assemblyUrl(); // vale dalla prossima connessione
+  transcript.enabled = settings.values.saveFiles;
+  OUTPUTS.forEach((out) => broadcast(profileMessage(out), out));
+  if (!overlayLan()) closeRemoteOverlays();
+  sendControl({ t: 'links', links: overlayLinks() });
   configureObs();
   if (deeplKey() !== deepl.cfg.apiKey) deepl.setApiKey(deeplKey());
   clean = createCleaner({ fillers: cleanFillers(), profanity: cleanProfanity() });
@@ -500,6 +515,13 @@ function handleAudio(ws, data) {
 
 const isLocal = (req) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
 const controlAllowed = (req) => CONTROL_ALLOW_LAN || isLocal(req);
+// I sottotitoli escono da questo computer solo se l'operatore lo permette.
+const overlayLan = () => OVERLAY_ALLOW_LAN || settings.values.overlayLan;
+const overlayAllowed = (req) => overlayLan() || isLocal(req);
+
+function closeRemoteOverlays() {
+  for (const out of OUTPUTS) for (const res of sseClients[out]) if (!isLocal(res.req)) res.destroy();
+}
 
 // Un collegamento da un altro sito non deve poter comandare il server.
 function sameOrigin(req) {
@@ -563,6 +585,10 @@ const server = http.createServer((req, res) => {
     res.writeHead(302, { Location: controlAllowed(req) ? '/control' : '/overlay?out=room' }).end();
     return;
   }
+  if ((pathname === '/events' || Object.hasOwn(OVERLAY_FILES, pathname)) && !overlayAllowed(req)) {
+    res.writeHead(403).end(t('Sottotitoli disponibili solo sul computer dell\'app'));
+    return;
+  }
   if (pathname === '/events') { serveEvents(req, res, url); return; }
   if (Object.hasOwn(OVERLAY_FILES, pathname)) { serveFile(res, OVERLAY_FILES[pathname]); return; }
   if (Object.hasOwn(CONTROL_FILES, pathname)) {
@@ -622,7 +648,7 @@ function overlayLinks() {
   return {
     stream: `${base}/overlay?out=stream`,
     room: `${base}/overlay?out=room`,
-    network: lanAddresses().map((ip) => `http://${ip}:${activePort}/overlay?out=room`),
+    network: (overlayLan() ? lanAddresses() : []).map((ip) => `http://${ip}:${activePort}/overlay?out=room`),
   };
 }
 

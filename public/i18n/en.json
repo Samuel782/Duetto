@@ -262,5 +262,18 @@
   "{n} termini chiave ricaricati. Glossario: {glossary}": "{n} key terms reloaded. Glossary: {glossary}",
   "{view} {lang} · finestre: {n}": "{view} {lang} · windows: {n}",
   "È disponibile Duetto {version}": "Duetto {version} is available",
-  "☕ Supportami su Ko-fi": "☕ Support me on Ko-fi"
+  "☕ Supportami su Ko-fi": "☕ Support me on Ko-fi",
+  "Privacy": "Privacy",
+  "Salva trascrizione e file dei sottotitoli": "Save the transcript and subtitle files",
+  "Restano su questo computer finché non li cancelli. Se spegni l'opzione, da quel momento non si scrive più nulla.": "They stay on this computer until you delete them. If you turn this off, nothing more is written from then on.",
+  "Permetti ad altri dispositivi della rete di vedere i sottotitoli": "Let other devices on the network see the subtitles",
+  "Serve se il maxischermo o OBS sono su un altro computer. Chiunque sia sulla stessa rete potrà leggerli.": "Needed if the big screen or OBS is on another computer. Anyone on the same network will be able to read them.",
+  "I sottotitoli sono automatici e possono contenere errori. Informa relatori e pubblico quando serve.": "Subtitles are automatic and can contain mistakes. Let speakers and the audience know when needed.",
+  "Mostra al pubblico che i sottotitoli sono generati con AI": "Show the audience that subtitles are AI-generated",
+  "Testo dell'avviso (vuoto: quello predefinito, nella lingua dell'uscita)": "Notice text (empty: the default one, in the output's language)",
+  "Resta visibile su streaming e sala, sul bordo opposto ai sottotitoli. Non compare nei sottotitoli mandati a OBS: lì scrivilo nella descrizione della diretta.": "It stays visible on the stream and the big screen, on the edge opposite the subtitles. It does not appear in the captions sent to OBS: there, write it in the stream description.",
+  "Come Duetto tratta i dati": "How Duetto handles data",
+  "Licenza di Duetto": "Duetto's licence",
+  "Software di terze parti": "Third-party software",
+  "Sottotitoli disponibili solo sul computer dell'app": "Subtitles available only on the app's computer"
 }

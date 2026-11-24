@@ -15,6 +15,9 @@
   }
   #box { display: flex; flex-direction: column; border-radius: 8px; transition-property: opacity; }
   #box.empty { visibility: hidden; }
+  /* Avviso fisso, sul bordo opposto ai sottotitoli: non sparisce con le pause. */
+  #notice { position: absolute; left: 80px; right: 80px; text-align: center; font-size: 28px; line-height: 1.3; }
+  #notice span { padding: 0.2em 0.6em; border-radius: 8px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
   .block { white-space: pre; unicode-bidi: plaintext; }
 </style>
 </head>
@@ -24,6 +27,7 @@
     <div class="block" id="original" dir="auto"></div>
     <div class="block" id="translation" dir="auto"></div>
   </div>
+  <div id="notice"><span dir="auto"></span></div>
 </div>
 <script src="/overlay.js"></script>
 </body>

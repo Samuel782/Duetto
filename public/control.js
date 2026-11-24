@@ -44,6 +44,7 @@ function connect() {
     }
     else if (m.t === 'state') { appState = m; renderState(); }
     else if (m.t === 'status') { lastStatus = m; renderStatus(); }
+    else if (m.t === 'links') renderLinks(m.links);
     else if (m.t === 'notice') { $('notice').textContent = m.message; }
     // Lingua cambiata nelle Impostazioni: si ricarica subito, ma mai mentre l'audio è in invio.
     else if (m.t === 'language' && m.lang !== I18N.lang) {

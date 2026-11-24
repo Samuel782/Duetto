@@ -1,7 +1,7 @@
 {
   "name": "duetto",
   "productName": "Duetto",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Sottotitoli live in più lingue per dirette e maxischermi",
   "author": "Samuel Luggeri",
   "type": "module",
@@ -13,7 +13,8 @@
   },
   "scripts": {
     "app": "electron .",
-    "dist": "electron-builder --mac --win",
+    "dist": "electron-builder --mac --win && npm run sbom",
+    "sbom": "node scripts/make-sbom.mjs",
     "dist:mac": "electron-builder --mac",
     "dist:mac:glass": "electron-builder --mac -c.mac.icon=build/Duetto.icon",
     "icon": "electron scripts/make-icon.mjs",
@@ -29,7 +30,7 @@
     "ws": "^8.18.0"
   },
   "devDependencies": {
-    "electron": "^45.2.3",
+    "electron": "^45.4.1",
     "electron-builder": "^26.18.0"
   },
   "build": {
@@ -45,6 +46,24 @@
       "server/**",
       "public/**",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "LICENSE",
+        "to": "LICENSE.duetto.txt"
+      },
+      {
+        "from": "THIRD-PARTY-NOTICES.md",
+        "to": "THIRD-PARTY-NOTICES.md"
+      },
+      {
+        "from": "PRIVACY.md",
+        "to": "PRIVACY.md"
+      },
+      {
+        "from": "PRIVACY.it.md",
+        "to": "PRIVACY.it.md"
+      }
     ],
     "electronLanguages": [
       "en",

@@ -17,6 +17,7 @@ const clock = (date) => date.toLocaleTimeString('it-IT', { hour12: false });
 export class Transcript {
   constructor(rootDir) {
     this.rootDir = rootDir;
+    this.enabled = true; // si può spegnere nelle Impostazioni
     this.dir = null;
     this.t0 = 0;
     this.counters = new Map(); // ogni file SRT numera i suoi sottotitoli
@@ -38,6 +39,7 @@ export class Transcript {
   }
 
   note(text) {
+    if (!this.enabled) return;
     try {
       this._ensureDir();
       this._append('trascrizione.txt', `[${clock(new Date())}] *** ${text}\n`);
@@ -56,6 +58,7 @@ export class Transcript {
   // con orari in millisecondi. targets sono le lingue in onda per questa frase: ognuna ha il suo SRT,
   // anche quando la traduzione non è arrivata, così i file restano allineati.
   addSentence(entry) {
+    if (!this.enabled) return;
     try {
       this._ensureDir();
       if (!this.t0) this.t0 = entry.startAt;
