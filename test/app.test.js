@@ -36,7 +36,9 @@ async function setup(extraEnv = {}, mockOptions = {}) {
   const mock = await startMock(mockOptions);
   const port = nextPort++;
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'duetto-test-'));
-  const child = spawn(process.execPath, ['server/index.js'], {
+  // DUETTO_SERVER_BIN: prova il server Rust con gli stessi test.
+  const bin = process.env.DUETTO_SERVER_BIN;
+  const child = spawn(bin || process.execPath, bin ? [] : ['server/index.js'], {
     cwd: fileURLToPath(new URL('..', import.meta.url)),
     env: {
       PATH: process.env.PATH,
@@ -371,6 +373,29 @@ test('sicurezza: origine estranea rifiutata, nessuna chiave nelle pagine', async
   assert.ok(!all.includes('chiave-segreta-deepl'));
   assert.ok(!all.includes('mock-key'));
   assert.equal((await fetch(`http://127.0.0.1:${ctx.port}/../.env`)).status, 404);
+});
+
+test('sicurezza: un nome estraneo che punta a questo computer viene rifiutato', async () => {
+  ctx = await setup();
+  const status = (p, host) => new Promise((resolve, reject) => {
+    http.get({ host: '127.0.0.1', port: ctx.port, path: p, headers: { Host: host }, agent: false }, (res) => { res.destroy(); resolve(res.statusCode); }).on('error', reject);
+  });
+  const opens = (host) => new Promise((resolve) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${ctx.port}/ws`, { headers: { Host: host, Origin: `http://${host}` } });
+    ws.on('open', () => { ws.terminate(); resolve(true); });
+    ws.on('error', () => resolve(false));
+  });
+  for (const name of ['localhost', 'LOCALHOST', '127.0.0.1', '[::1]']) {
+    const host = `${name}:${ctx.port}`;
+    assert.equal(await status('/control', host), 200, host);
+    assert.equal(await status('/overlay', host), 200, host);
+    assert.equal(await opens(host), true, host);
+  }
+  for (const name of ['evil.example', 'localhost.evil.example', '127.0.0.1.evil.example']) {
+    const host = `${name}:${ctx.port}`;
+    for (const p of ['/control', '/settings', '/overlay', '/events?out=room']) assert.equal(await status(p, host), 403, `${host}${p}`);
+    assert.equal(await opens(host), false, host);
+  }
 });
 
 test('Impostazioni: chiavi salvate e verificate, mai rimandate al browser', async () => {

@@ -1,59 +1,58 @@
-// Prototipo: finestra Tauri attorno al server Node esistente.
+// Duetto desktop: finestre, portachiavi e microfono attorno al server in Rust.
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 mod mic;
+mod shell;
 
-use base64::Engine;
+use duetto_core::{i18n::t, log::{log, warn}, settings::Cipher};
+use duetto_server::{app::App, assembly::{AssemblyLink, LinkConfig}, config::Config};
 use std::{
-    io::{BufRead, BufReader, Write},
-    process::{Child, ChildStdin, Command, Stdio},
-    path::PathBuf,
-    sync::{atomic::{AtomicBool, Ordering::SeqCst}, mpsc, Arc, Mutex},
-    time::{Duration, Instant},
+    process::Command,
+    sync::{atomic::{AtomicBool, Ordering::SeqCst}, Arc, OnceLock},
+    time::Duration,
+};
+use tauri::{
+    async_runtime::{block_on, spawn},
+    menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
+    utils::config::BackgroundThrottlingPolicy,
+    webview::NewWindowResponse,
+    AppHandle, Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder,
 };
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_opener::OpenerExt;
-use tauri::{
-    utils::config::BackgroundThrottlingPolicy,
-    webview::NewWindowResponse,
-    menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
-    Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder,
-};
 
-struct Server(Mutex<Option<Child>>);
-// Verso il server: una riga per messaggio. Chiuderlo fa fermare il server in ordine.
-struct ToServer(Arc<Mutex<Option<ChildStdin>>>);
+const KEYCHAIN: &str = "com.samuelluggeri.duetto.prototipo";
 
+static SERVER: OnceLock<Arc<App>> = OnceLock::new();
 static QUIT_ASKED: AtomicBool = AtomicBool::new(false);
 static QUITTING: AtomicBool = AtomicBool::new(false);
 
-// Testi delle finestre native, nella lingua scelta: li manda il server, che ha il dizionario.
-static TEXTS: Mutex<Vec<String>> = Mutex::new(Vec::new());
-const DEFAULT_TEXTS: [&str; 6] = ["Chiudi", "Annulla", "Chiudere Duetto?", "Se sei in diretta, i sottotitoli si fermano.", "Uscita sala", "Impostazioni"];
-fn text(i: usize) -> String {
-    TEXTS.lock().unwrap().get(i).cloned().unwrap_or_else(|| DEFAULT_TEXTS[i].into())
+fn testing() -> bool { std::env::var("DUETTO_TEST").is_ok_and(|v| v == "1") }
+
+// Nella lingua scelta nelle Impostazioni.
+fn text(key: &str) -> String {
+    SERVER.get().map_or_else(|| key.into(), |s| { let lang = s.lock().lang; t(lang, key, &[]) })
 }
 
-// Chiave che cifra le chiavi API, custodita nel portachiavi del sistema. Se il portachiavi nega
-// l'accesso non se ne crea un'altra: renderebbe illeggibili le chiavi già salvate.
-fn master_key() -> Option<String> {
-    // Nelle prove con servizi finti non serve, e una firma nuova farebbe comparire la richiesta di macOS.
-    if std::env::var("DUETTO_MOCK").is_ok_and(|v| v == "1") { return None; }
-    let entry = keyring::Entry::new("com.samuelluggeri.duetto.prototipo", "chiave").ok()?;
+// Chiave che cifra le chiavi API, custodita nel portachiavi. Se l'accesso è negato non se ne crea
+// un'altra: renderebbe illeggibili le chiavi già salvate.
+fn cipher() -> Option<Cipher> {
+    // Nelle prove non serve, e una firma nuova farebbe comparire la richiesta di macOS.
+    if testing() { return None; }
+    let entry = keyring::Entry::new(KEYCHAIN, "chiave").ok()?;
     let key = match entry.get_secret() {
         Ok(k) if k.len() == 32 => k,
         Err(keyring::Error::NoEntry) => {
             let mut k = vec![0u8; 32];
             getrandom::fill(&mut k).ok()?;
             entry.set_secret(&k).ok()?;
-            log("portachiavi: chiave creata");
             k
         }
         other => {
-            log(&format!("portachiavi non disponibile: {:?}", other.err()));
+            warn(format!("Portachiavi non disponibile: {:?}", other.err()));
             return None;
         }
     };
-    log("portachiavi: chiave letta");
-    Some(key.iter().map(|b| format!("{b:02x}")).collect())
+    Some(Cipher::new(&key.try_into().ok()?))
 }
 
 #[cfg(target_os = "macos")]
@@ -70,6 +69,15 @@ fn keep_awake() {
 #[cfg(not(any(target_os = "macos", windows)))]
 fn keep_awake() {}
 
+// Dopo un arresto anomalo macOS chiede se riaprire le finestre, e l'app resta ferma finché nessuno risponde.
+#[cfg(target_os = "macos")]
+fn no_reopen_question() {
+    use objc2_foundation::{ns_string, NSUserDefaults};
+    NSUserDefaults::standardUserDefaults().setBool_forKey(true, ns_string!("ApplePersistenceIgnoreState"));
+}
+#[cfg(not(target_os = "macos"))]
+fn no_reopen_question() {}
+
 // Sopra la barra dei menu, altrimenti può comparire sui sottotitoli in sala.
 #[cfg(target_os = "macos")]
 fn raise_room(w: &tauri::WebviewWindow) {
@@ -81,165 +89,96 @@ fn raise_room(w: &tauri::WebviewWindow) {
     }
 }
 #[cfg(not(target_os = "macos"))]
-fn raise_room(w: &tauri::WebviewWindow) {
-    let _ = w.set_fullscreen(true);
-}
+fn raise_room(w: &tauri::WebviewWindow) { let _ = w.set_fullscreen(true); }
 
 // Un evento può essere in diretta: chiudere deve essere una scelta.
-fn ask_quit(app: &tauri::AppHandle) {
+fn ask_quit(app: &AppHandle) {
     if QUIT_ASKED.swap(true, SeqCst) { return; }
-    log("conferma di chiusura mostrata");
+    if testing() { log("Prova: conferma di chiusura"); }
     let h = app.clone();
     let mut d = app.dialog()
-        .message(text(3)).title(text(2)).kind(MessageDialogKind::Warning)
-        .buttons(MessageDialogButtons::OkCancelCustom(text(0), text(1)));
+        .message(text("Se sei in diretta, i sottotitoli si fermano.")).title(text("Chiudere Duetto?")).kind(MessageDialogKind::Warning)
+        .buttons(MessageDialogButtons::OkCancelCustom(text("Chiudi"), text("Annulla")));
     if let Some(w) = app.get_webview_window("main") { d = d.parent(&w); }
-    d.show(move |yes| {
-        if yes { quit(&h) } else { QUIT_ASKED.store(false, SeqCst) }
-    });
+    d.show(move |yes| if yes { quit(&h) } else { QUIT_ASKED.store(false, SeqCst) });
 }
 
-fn quit(app: &tauri::AppHandle) {
+fn quit(app: &AppHandle) {
     QUITTING.store(true, SeqCst);
     app.exit(0);
 }
 
-// Dentro il pacchetto server e Node stanno in Resources/app; in sviluppo si usa la cartella del progetto.
-fn locate() -> (PathBuf, PathBuf) {
-    let exe = std::env::current_exe().unwrap_or_default();
-    let dir = exe.parent().map(PathBuf::from).unwrap_or_default();
-    for root in [dir.join("../Resources/app"), dir.join("app")] {
-        if root.join("server/index.js").exists() {
-            let name = if cfg!(windows) { "node.exe" } else { "duetto-node" };
-            return (root, dir.join(name));
-        }
+fn fatal(app: &AppHandle, title: String, message: String) {
+    warn(format!("{title}: {message}"));
+    let h = app.clone();
+    app.dialog().message(message).title(title).kind(MessageDialogKind::Error).show(move |_| quit(&h));
+}
+
+// Chiude la sessione, che si paga a connessione aperta, e lascia arrivare l'ultimo testo.
+fn stop_server() {
+    let Some(s) = SERVER.get() else { return };
+    s.engine.shutdown();
+    s.flush();
+    // Dentro async: il temporizzatore va creato quando il runtime è attivo.
+    block_on(async { tokio::time::sleep(Duration::from_millis(1500)).await });
+    s.obs.stop();
+    s.flush();
+    log("Chiuso in ordine");
+}
+
+// Avvia il server e restituisce la porta.
+fn start_server(app: &AppHandle) -> Result<u16, String> {
+    let data = match std::env::var("DUETTO_DATA_DIR") {
+        Ok(d) => d.into(),
+        Err(_) => app.path().app_data_dir().map_err(|e| e.to_string())?,
+    };
+    std::fs::create_dir_all(&data).map_err(|e| e.to_string())?;
+    duetto_core::log::to_file(data.join("app.log"));
+    let mut cfg = Config::from_env();
+    cfg.keyterms = data.join("keyterms.txt");
+    cfg.glossary = data.join("glossario.csv");
+    if std::env::var("OUTPUT_DIR").is_err() {
+        cfg.output_dir = app.path().document_dir().map_err(|e| e.to_string())?.join("Duetto");
     }
-    (concat!(env!("CARGO_MANIFEST_DIR"), "/..").into(), std::env::var("DUETTO_NODE").unwrap_or_else(|_| "node".into()).into())
-}
+    if std::env::var("DUETTO_LOCALE").is_err() { cfg.locale = sys_locale::get_locale().unwrap_or_default(); }
+    cfg.desktop_app = true;
+    cfg.port_tries = 10;
+    let desktop = shell::Desktop::new(app.clone(), data.join("mic.json"));
+    cfg.data_dir = data;
 
-fn log(line: &str) {
-    println!("{line}");
-    if let Ok(path) = std::env::var("DUETTO_PROBE_LOG") {
-        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
-            let _ = writeln!(f, "{line}");
-        }
-    }
-}
-
-fn probing() -> bool {
-    std::env::var("DUETTO_PROBE").is_ok()
-}
-
-fn start_mic(wanted: mic::Wanted, stdin: Arc<Mutex<Option<ChildStdin>>>) {
-    let (tx, rx) = mpsc::sync_channel::<String>(100); // 10 s: se il server si blocca, l'audio vecchio si scarta
-    std::thread::spawn(move || {
-        for line in rx {
-            if let Some(w) = stdin.lock().unwrap().as_mut() { let _ = writeln!(w, "{line}"); }
-        }
-    });
-    std::thread::spawn(move || {
-        mic::run(wanted, |event| {
-            let line = match event {
-                mic::Event::Frame { peak, pcm } => format!("PCM {peak:.5} {}", base64::engine::general_purpose::STANDARD.encode(pcm)),
-                mic::Event::Devices(d) => format!("MIC {}", serde_json::json!({ "devices": d.iter().map(|(id, name)| serde_json::json!({ "id": id, "name": name })).collect::<Vec<_>>() })),
-                mic::Event::Opened(n) => format!("MIC {}", serde_json::json!({ "opened": n })),
-                mic::Event::Failed(e) => format!("MIC {}", serde_json::json!({ "error": e })),
-            };
-            let _ = tx.try_send(line);
+    block_on(async {
+        let (engine, events) = AssemblyLink::new(LinkConfig::from(&cfg));
+        let server = App::new(cfg, engine, Some(desktop.clone()), cipher());
+        let _ = SERVER.set(server.clone());
+        server.listen(events);
+        let (port, serve) = duetto_server::start(server.clone()).await.map_err(|e| e.to_string())?;
+        desktop.start(&server);
+        let h = app.clone();
+        spawn(async move {
+            let end = serve.await;
+            if !QUITTING.load(SeqCst) { fatal(&h, "Duetto".into(), format!("Il server interno si è fermato / The internal server stopped: {end:?}")); }
         });
-    });
+        Ok(port)
+    })
 }
 
-fn start_server(app: &tauri::AppHandle, data: &std::path::Path, docs: &std::path::Path) -> Result<(Child, u16, bool), String> {
-    let (root, node) = locate();
-    let mut child = Command::new(node)
-        .arg("src-tauri/node-host.mjs")
-        .current_dir(root)
-        .env("DUETTO_LOCALE", sys_locale::get_locale().unwrap_or_default())
-        .env("DATA_DIR", data)
-        .env("OUTPUT_DIR", docs)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
-        .map_err(|e| e.to_string())?;
-    // Prima riga di stdin: la chiave. Mai nell'ambiente o negli argomenti, dove altri processi la leggono.
-    let key = master_key().unwrap_or_default();
-    let mut stdin = child.stdin.take().unwrap();
-    writeln!(stdin, "{key}").map_err(|e| e.to_string())?;
-    let stdin = Arc::new(Mutex::new(Some(stdin)));
-    app.manage(ToServer(stdin.clone()));
-    let wanted = mic::Wanted::default();
-    start_mic(wanted.clone(), stdin);
-    let out = child.stdout.take().unwrap();
-    let app = app.clone();
-    let (tx, rx) = mpsc::channel();
-    std::thread::spawn(move || {
-        for line in BufReader::new(out).lines().map_while(Result::ok) {
-            if let Some(port) = line.strip_prefix("DUETTO_READY ") {
-                let mut p = port.split_whitespace();
-                let n = p.next().and_then(|v| v.parse::<u16>().ok()).unwrap_or(0);
-                let _ = tx.send((n, p.next() == Some("1")));
-            } else if let Some(name) = line.strip_prefix("DUETTO_MIC ") {
-                if let Ok(name) = serde_json::from_str::<String>(name) { wanted.set(name) }
-            } else if let Some(t) = line.strip_prefix("DUETTO_TEXTS ") {
-                let list: Vec<String> = t.split('\t').map(String::from).collect();
-                if list.len() == DEFAULT_TEXTS.len() { *TEXTS.lock().unwrap() = list; }
-                continue;
-            }
-            log(&line);
-        }
-        if !QUITTING.load(SeqCst) && app.try_state::<Server>().is_some_and(|s| s.0.lock().unwrap().is_some()) {
-            log("server terminato in modo imprevisto");
-            let h = app.clone();
-            app.dialog().message("Il server interno si è fermato. / The internal server stopped.")
-                .title("Duetto").kind(MessageDialogKind::Error).show(move |_| quit(&h));
-        }
-    });
-    match rx.recv_timeout(Duration::from_secs(15)) {
-        Ok((port, keys)) if port > 0 => Ok((child, port, keys)),
-        _ => {
-            let _ = child.kill();
-            Err("il server non parte".into())
-        }
-    }
-}
+type Builder<'a> = WebviewWindowBuilder<'a, tauri::Wry, AppHandle>;
 
-// Chiudere stdin fa fermare il server in ordine: così la sessione AssemblyAI smette di costare.
-fn stop_server(app: &tauri::AppHandle) {
-    let Some(mut child) = app.state::<Server>().0.lock().unwrap().take() else { return };
-    let end = Instant::now() + Duration::from_secs(4);
-    while Instant::now() < end {
-        // Se il filo audio sta scrivendo si riprova, senza restare bloccati.
-        if let Ok(mut stdin) = app.state::<ToServer>().0.try_lock() { stdin.take(); }
-        if matches!(child.try_wait(), Ok(Some(_))) {
-            log("server chiuso in ordine");
-            return;
-        }
-        std::thread::sleep(Duration::from_millis(50));
-    }
-    let _ = child.kill();
-    log("server chiuso a forza");
-}
-
-type Builder<'a> = WebviewWindowBuilder<'a, tauri::Wry, tauri::AppHandle>;
-
-fn window<'a>(app: &'a tauri::AppHandle, label: &str, url: Url, title: &str) -> Builder<'a> {
+fn window<'a>(app: &'a AppHandle, label: &str, url: Url, title: &str) -> Builder<'a> {
     let origin = url.origin();
     let mut b = WebviewWindowBuilder::new(app, label, WebviewUrl::External(url))
         .title(title)
         .initialization_script("window.DUETTO_NATIVE_MIC = true;")
         .background_throttling(BackgroundThrottlingPolicy::Disabled)
         .on_navigation(move |u| u.origin() == origin);
-    if probing() {
-        b = b
-            .initialization_script(format!("window.__PROBE_MODE = {:?};", std::env::var("DUETTO_PROBE_MODE").unwrap_or_default()))
-            .initialization_script(include_str!("../probe.js"))
+    if testing() {
+        b = b.initialization_script(include_str!("../probe.js"))
             .on_document_title_changed(|_, t| if t.starts_with("PROBE") { log(&t) });
     }
     b
 }
 
-fn open_child(app: &tauri::AppHandle, url: Url) {
+fn open_child(app: &AppHandle, url: Url) {
     let label = match url.path() {
         "/overlay" => "room",
         "/settings" => "settings",
@@ -250,7 +189,8 @@ fn open_child(app: &tauri::AppHandle, url: Url) {
         return;
     }
     let mut external = None;
-    let mut b = window(app, label, url, &text(if label == "room" { 4 } else { 5 }));
+    let origin = url.origin();
+    let mut b = window(app, label, url, &text(if label == "room" { "Uscita sala" } else { "Impostazioni" }));
     if label == "settings" {
         b = b.inner_size(720.0, 860.0);
     } else {
@@ -258,39 +198,78 @@ fn open_child(app: &tauri::AppHandle, url: Url) {
         let primary = app.primary_monitor().ok().flatten();
         external = app.available_monitors().unwrap_or_default().into_iter()
             .find(|m| primary.as_ref().is_some_and(|p| p.position() != m.position()));
+        // Senza un secondo schermo resta una finestra normale, per non coprire la regia.
         if let Some(m) = &external {
             let pos = m.position().to_logical::<f64>(m.scale_factor());
             b = b.position(pos.x, pos.y).decorations(false);
-            log("sala: secondo schermo");
         }
         // Senza accesso alla tastiera nativa, Esc passa dalla pagina.
         b = b.initialization_script(
             "addEventListener('keydown', (e) => { if (e.key === 'Escape') location.href = 'duetto-close:'; }, true);",
         );
         let handle = app.clone();
-        let origin = app.get_webview_window("main").and_then(|w| w.url().ok()).map(|u| u.origin());
         b = b.on_navigation(move |u| {
             if u.scheme() == "duetto-close" {
                 if let Some(w) = handle.get_webview_window("room") { let _ = w.close(); }
                 return false;
             }
-            Some(u.origin()) == origin
+            u.origin() == origin
         });
     }
     match b.build() {
-        // Su Mac lo schermo intero "semplice" copre tutto lo schermo senza creare uno Space.
-        Ok(w) if external.is_some() => {
-            raise_room(&w);
-        }
+        Ok(w) if external.is_some() => raise_room(&w),
         Ok(_) => {}
-        Err(e) => log(&format!("finestra {label}: {e}")),
+        Err(e) => warn(format!("Finestra {label}: {e}")),
     }
 }
 
+fn open_main(app: &AppHandle, port: u16) -> Result<(), Box<dyn std::error::Error>> {
+    let url: Url = format!("http://localhost:{port}/control").parse()?;
+    let origin = url.origin();
+    let handle = app.clone();
+    // La regia parte sullo schermo principale: l'altro è della sala.
+    let mut main = window(app, "main", url, "Duetto").inner_size(1440.0, 900.0);
+    if let Some(m) = app.primary_monitor()? {
+        let (pos, size) = (m.position().to_logical::<f64>(m.scale_factor()), m.size().to_logical::<f64>(m.scale_factor()));
+        main = main.position(pos.x + ((size.width - 1440.0) / 2.0).max(0.0), pos.y + ((size.height - 900.0) / 2.0).max(0.0));
+    }
+    main.min_inner_size(760.0, 600.0)
+        .on_new_window(move |u, _| {
+            if u.origin() != origin {
+                if u.scheme() == "https" { let _ = handle.opener().open_url(u.as_str(), None::<&str>); }
+            } else {
+                let h = handle.clone();
+                let _ = handle.run_on_main_thread(move || open_child(&h, u));
+            }
+            NewWindowResponse::Deny
+        })
+        .build()?;
+    // Al primo avvio servono le chiavi: la finestra si apre da sola.
+    if SERVER.get().is_some_and(|s| !s.has_keys()) {
+        open_child(app, format!("http://localhost:{port}/settings").parse()?);
+    }
+    Ok(())
+}
+
+// Solo prova: riduce la regia a icona, chiede di chiudere, e dopo il limite chiude tutto, microfono compreso.
+fn probe(app: &AppHandle) {
+    let Some(limit) = std::env::var("DUETTO_PROBE").ok().and_then(|v| v.parse::<u64>().ok()).filter(|_| testing()) else { return };
+    let h = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_secs(20));
+        log("Prova: regia ridotta a icona");
+        if let Some(w) = h.get_webview_window("main") { let _ = w.minimize(); }
+        std::thread::sleep(Duration::from_secs(limit.saturating_sub(24)));
+        if let Some(w) = h.get_webview_window("main") { let _ = w.close(); }
+        std::thread::sleep(Duration::from_secs(4));
+        quit(&h);
+    });
+}
+
 fn main() {
+    no_reopen_question();
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
-            log("seconda istanza: porto avanti la finestra");
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.unminimize();
                 let _ = w.set_focus();
@@ -300,7 +279,7 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         // Menu proprio: la voce Esci predefinita salterebbe la conferma.
         .menu(|app| {
-            let quit = MenuItem::with_id(app, "quit", text(0), true, Some("CmdOrCtrl+Q"))?;
+            let quit = MenuItem::with_id(app, "quit", text("Chiudi"), true, Some("CmdOrCtrl+Q"))?;
             let edit = Submenu::with_items(app, "Edit", true, &[
                 &PredefinedMenuItem::undo(app, None)?, &PredefinedMenuItem::redo(app, None)?,
                 &PredefinedMenuItem::cut(app, None)?, &PredefinedMenuItem::copy(app, None)?,
@@ -311,53 +290,14 @@ fn main() {
         .on_menu_event(|app, e| if e.id().as_ref() == "quit" { ask_quit(app) })
         .setup(|app| {
             keep_awake();
-            let data = match std::env::var("DUETTO_DATA_DIR") {
-                Ok(d) => d.into(),
-                Err(_) => app.path().app_data_dir()?,
-            };
-            std::fs::create_dir_all(&data)?;
-            let docs = match std::env::var("OUTPUT_DIR") {
-                Ok(d) => d.into(),
-                Err(_) => app.path().document_dir()?.join("Duetto"),
-            };
-            let (child, port, has_keys) = start_server(app.handle(), &data, &docs)?;
-            app.manage(Server(Mutex::new(Some(child))));
-            let url: Url = format!("http://localhost:{port}/control").parse()?;
-            let origin = url.origin();
-            let handle = app.handle().clone();
-            // La regia parte sullo schermo principale: l'altro è della sala.
-            let mut main = window(app.handle(), "main", url, "Duetto").inner_size(1440.0, 900.0);
-            if let Some(m) = app.primary_monitor()? {
-                let (pos, size) = (m.position().to_logical::<f64>(m.scale_factor()), m.size().to_logical::<f64>(m.scale_factor()));
-                main = main.position(pos.x + ((size.width - 1440.0) / 2.0).max(0.0), pos.y + ((size.height - 900.0) / 2.0).max(0.0));
+            match start_server(app.handle()) {
+                Ok(port) => open_main(app.handle(), port)?,
+                Err(e) => {
+                    let message = text("Nessuna porta disponibile: {error}").replace("{error}", &e);
+                    fatal(app.handle(), text("Duetto non può partire"), message);
+                }
             }
-            main
-                .min_inner_size(760.0, 600.0)
-                .on_new_window(move |u, _| {
-                    if u.origin() != origin {
-                        if u.scheme() == "https" { let _ = handle.opener().open_url(u.as_str(), None::<&str>); }
-                    } else {
-                        let h = handle.clone();
-                        let _ = handle.run_on_main_thread(move || open_child(&h, u));
-                    }
-                    NewWindowResponse::Deny
-                })
-                .build()?;
-            if !has_keys {
-                open_child(app.handle(), format!("http://localhost:{port}/settings").parse()?);
-            }
-
-            // Prove: chiude tutto dopo il limite, microfono compreso.
-            if let Some(limit) = std::env::var("DUETTO_PROBE").ok().and_then(|v| v.parse::<u64>().ok()) {
-                let h = app.handle().clone();
-                std::thread::spawn(move || {
-                    std::thread::sleep(Duration::from_secs(20));
-                    log("--- regia ridotta a icona");
-                    if let Some(w) = h.get_webview_window("main") { let _ = w.minimize(); }
-                    std::thread::sleep(Duration::from_secs(limit.saturating_sub(20)));
-                    quit(&h);
-                });
-            }
+            probe(app.handle());
             Ok(())
         })
         .build(tauri::generate_context!())
@@ -369,7 +309,9 @@ fn main() {
                 api.prevent_close();
                 ask_quit(app);
             }
-            RunEvent::Exit => stop_server(app),
+            // Chiudere le altre finestre non chiude l'app.
+            RunEvent::ExitRequested { api, code: None, .. } if !QUITTING.load(SeqCst) => api.prevent_exit(),
+            RunEvent::Exit => stop_server(),
             _ => {}
         });
 }
