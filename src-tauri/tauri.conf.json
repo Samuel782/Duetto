@@ -1,0 +1,8 @@
+{
+  "productName": "Duetto Prototipo",
+  "version": "0.0.1",
+  "identifier": "com.samuelluggeri.duetto.prototipo",
+  "build": { "frontendDist": "./empty" },
+  "app": { "windows": [], "security": { "csp": null } },
+  "bundle": { "active": false, "icon": ["icons/icon.png"] }
+}

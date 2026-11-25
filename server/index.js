@@ -32,7 +32,8 @@ process.on('uncaughtException', (err) => warn('Errore non gestito:', err));
 process.on('unhandledRejection', (err) => warn('Promessa rifiutata:', err));
 
 // L'app installata registra qui le azioni che solo il sistema operativo può compiere.
-export const hooks = { openFolder: null };
+// micCommand e micState: microfono catturato dal guscio invece che dalla pagina.
+export const hooks = { openFolder: null, micCommand: null, micState: null, sendControl: null };
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const env = process.env;
@@ -493,6 +494,7 @@ async function handleCommand(ws, m) {
     hooks.openFolder?.(OUTPUT_DIR);
     return;
   }
+  if (hooks.micCommand && ['micStart', 'micDevice', 'pause'].includes(m.cmd)) hooks.micCommand(m);
   const command = Object.hasOwn(commands, m.cmd) ? commands[m.cmd] : null;
   if (!command) return;
   command(m);
@@ -510,6 +512,11 @@ function handleAudio(ws, data) {
   if (demoTimer) stopDemo();
   link.pushAudio(data);
 }
+
+// Audio catturato dal guscio.
+hooks.sendControl = sendControl;
+const NATIVE_SOURCE = {};
+export function nativeAudio(data) { handleAudio(NATIVE_SOURCE, data); }
 
 // --- HTTP ---
 
@@ -621,6 +628,7 @@ wss.on('connection', (ws) => {
   }));
   ws.send(JSON.stringify(publicState()));
   ws.send(JSON.stringify(statusMessage()));
+  if (hooks.micState) ws.send(JSON.stringify(hooks.micState()));
   ws.on('message', (data, isBinary) => {
     if (isBinary) { handleAudio(ws, data); return; }
     let message;

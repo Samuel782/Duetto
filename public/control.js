@@ -45,6 +45,8 @@ function connect() {
     else if (m.t === 'state') { appState = m; renderState(); }
     else if (m.t === 'status') { lastStatus = m; renderStatus(); }
     else if (m.t === 'links') renderLinks(m.links);
+    else if (m.t === 'mic') renderNativeMic(m);
+    else if (m.t === 'level') onFrame({ data: m });
     else if (m.t === 'notice') { $('notice').textContent = m.message; }
     // Lingua cambiata nelle Impostazioni: si ricarica subito, ma mai mentre l'audio è in invio.
     else if (m.t === 'language' && m.lang !== I18N.lang) {
@@ -80,8 +82,25 @@ let lastSignalAt = 0;
 let lastClipAt = 0;
 let lastFrameAt = 0;
 let wakeLock = null;
+// Nel guscio Tauri il microfono lo cattura il sistema: la pagina sceglie l'ingresso e mostra il livello.
+const nativeMic = window.DUETTO_NATIVE_MIC === true;
+
+// Lo stato vero è nel server: vale anche dopo un ricaricamento della pagina.
+function renderNativeMic(m) {
+  const select = $('device');
+  const list = [...m.devices];
+  if (m.device && !list.some((d) => d.id === m.device)) list.push({ id: m.device, name: m.deviceName || m.device });
+  select.replaceChildren(new Option(t('Predefinito'), ''), ...list.map((d) => new Option(d.name, d.id)));
+  select.value = m.device;
+  started = m.started;
+  sending = m.sending;
+  wantCapture = !m.error;
+  if (m.error) setAudioNote(t('Ingresso non disponibile ({error}): nuovo tentativo…', { error: t(m.error) }), 'bad');
+  renderAudioButtons();
+}
 
 async function listDevices() {
+  if (nativeMic) return;
   try {
     const devices = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput');
     const select = $('device');
@@ -93,6 +112,7 @@ async function listDevices() {
 navigator.mediaDevices?.addEventListener('devicechange', listDevices);
 
 async function openInput() {
+  if (nativeMic) return;
   closeInput();
   const deviceId = $('device').value;
   stream = await navigator.mediaDevices.getUserMedia({
@@ -151,7 +171,7 @@ function onFrame({ data }) {
   if (data.peak >= 0.98) lastClipAt = now;
   peakHold = Math.max(data.peak, peakHold * 0.8);
   // Durante la riconnessione col server l'audio si scarta: non si accumula ritardo.
-  if (sending && isOpen() && ws.bufferedAmount < 64000) ws.send(data.pcm);
+  if (data.pcm && sending && isOpen() && ws.bufferedAmount < 64000) ws.send(data.pcm);
 }
 
 function setAudioNote(text, level = '') {
@@ -177,6 +197,7 @@ async function openMonitor() {
 }
 
 async function startCapture() {
+  if (nativeMic) { send({ cmd: 'micStart' }); return; }
   try {
     if (!stream) {
       wantCapture = true;
@@ -242,6 +263,11 @@ $('start').onclick = startCapture;
 $('pause').onclick = pause;
 $('resume').onclick = resume;
 $('device').onchange = async () => {
+  if (nativeMic) {
+    send({ cmd: 'micDevice', device: $('device').value });
+    $('device').blur();
+    return;
+  }
   safeStore.set('audioDevice', $('device').value);
   $('device').blur();
   if (wantCapture) {
@@ -681,5 +707,5 @@ connect();
 listDevices();
 renderAudioButtons();
 // Dopo un ricaricamento durante l'evento la cattura riparte da sola.
-if (safeStore.get('capturing')) startCapture();
+if (!nativeMic && safeStore.get('capturing')) startCapture();
 else openMonitor();
