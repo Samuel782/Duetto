@@ -1,6 +1,5 @@
-# Crea i pacchetti di Duetto sui Mac di GitHub, che hanno Xcode:
-# serve per compilare l'icona adattiva (build/Duetto.icon), che si adegua al tema chiaro e scuro.
-# Parte a mano da Actions → "Pacchetti" → "Run workflow", oppure da sola con un tag v1.2.0 e simili.
+# Crea i pacchetti di Duetto sui Mac di GitHub, come "npm run dist" sul computer.
+# Parte a mano da Actions → "Pacchetti" → "Run workflow", oppure da sola con un tag v1.2.2 e simili.
 # I file finiscono tra gli artefatti dell'esecuzione: la release su GitHub resta da fare a mano.
 name: Pacchetti
 
@@ -24,36 +23,19 @@ jobs:
           node-version: 22
           cache: npm
 
-      # L'icona adattiva si compila solo con Xcode 26 o successivo: sceglie il più recente installato.
-      - name: Scegli Xcode
-        run: |
-          XCODE=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
-          echo "Uso $XCODE"
-          sudo xcode-select -s "$XCODE"
-          xcrun actool --version
-          MAJOR=$(xcodebuild -version | head -1 | awk '{print $2}' | cut -d. -f1)
-          if [ "$MAJOR" -lt 26 ]; then echo "Serve Xcode 26 o successivo, trovato $MAJOR"; exit 1; fi
-
       - run: npm ci
 
       - name: Test
         run: npm test
 
-      - name: Mac (Apple e Intel) con icona adattiva
-        run: npx electron-builder --mac -c.mac.icon=build/Duetto.icon --publish never
+      - name: Mac (Apple e Intel)
+        run: npx electron-builder --mac --publish never
 
       - name: Windows
         run: npx electron-builder --win --publish never
 
       - name: Elenco dei componenti (SBOM)
         run: npm run sbom
-
-      # Controlla che l'icona adattiva sia davvero dentro l'app.
-      - name: Verifica icona
-        run: |
-          APP=$(ls -d dist/mac-arm64/Duetto.app)
-          test -f "$APP/Contents/Resources/Assets.car"
-          /usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' "$APP/Contents/Info.plist"
 
       - uses: actions/upload-artifact@v4
         with:
