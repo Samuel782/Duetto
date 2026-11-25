@@ -1,5 +1,10 @@
-//! Divide in blocchi di senso un turno lungo, mentre si parla. Le ragioni dei valori sono in
-//! `server/segmenter.js`.
+//! Divide in blocchi di senso un turno lungo, mentre si parla: così la traduzione non aspetta la fine
+//! del turno, che con chi parla senza pause può arrivare dopo decine di secondi.
+//!
+//! AssemblyAI non indica quali parole dei parziali siano stabili, e le più recenti cambiano spesso:
+//! serve un margine, più breve dove il punto di taglio è più sicuro. I valori vengono da prove con
+//! DeepL su parlato reale. Blocchi più lunghi ritardano le prime parole; con un limite di 50 caratteri
+//! il significato si rompe: "lavora al secondo / livello" è diventato "operates every second".
 use crate::js;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, sync::LazyLock};

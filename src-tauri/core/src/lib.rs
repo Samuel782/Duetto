@@ -1,5 +1,5 @@
-//! I moduli di Duetto che non toccano la rete, portati da `server/*.js` con lo stesso comportamento.
-//! `parity.mjs` confronta le due versioni sugli stessi dati.
+//! I moduli di Duetto che non toccano la rete. Si comportano come la versione 1, in JavaScript:
+//! `tests/golden.rs` ne conserva i risultati.
 pub mod captions;
 pub mod files;
 pub mod glossary;

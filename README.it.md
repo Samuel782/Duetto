@@ -29,7 +29,7 @@ Niente stenotipisti, niente cabina per gli interpreti, niente codice: basta un p
 
 ## Come funziona
 
-Duetto funziona su **Mac** e su PC **Windows**. La trascrizione usa [AssemblyAI](https://www.assemblyai.com) e la traduzione [DeepL](https://www.deepl.com/pro-api): serve una chiave per ciascuno, ed entrambi offrono credito gratuito per iniziare. Un'ora di parlato costa all'incirca uno o due euro.
+Duetto funziona su **Mac** (macOS 14 o successivo) e su PC **Windows** a 64 bit. La trascrizione usa [AssemblyAI](https://www.assemblyai.com) e la traduzione [DeepL](https://www.deepl.com/pro-api): serve una chiave per ciascuno, ed entrambi offrono credito gratuito per iniziare. Un'ora di parlato costa all'incirca uno o due euro.
 
 Scaricalo dalla pagina [Releases](https://github.com/Samuel782/Duetto/releases), aprilo e incolla le due chiavi. L'interfaccia è in italiano o in inglese, secondo la lingua del computer o la scelta nelle Impostazioni. All'avvio Duetto ti avvisa se c'è una nuova versione.
 
@@ -51,7 +51,7 @@ L'uso commerciale non è gratuito, ed è così che il progetto si sostiene:
 
 ## Per sviluppatori
 
-Serve [Node.js](https://nodejs.org) 20 o successivo.
+Duetto è scritto in Rust con [Tauri](https://tauri.app); le pagine sono HTML e JavaScript. Servono [Rust](https://rustup.rs) e, per i test, [Node.js](https://nodejs.org) 20 o successivo.
 
 ```bash
 npm install
@@ -61,13 +61,14 @@ npm install
 npm run app
 ```
 
-`npm test` esegue i test automatici con servizi finti, senza rete né credito. `npm run dist` crea i pacchetti per Mac e Windows nella cartella `dist/`.
+`npm test` esegue i test automatici con servizi finti, senza rete né credito. `npm start` avvia solo il server, da usare nel browser: legge le chiavi dalle Impostazioni o dalle variabili in `.env.example`. `npm run dist` crea il pacchetto per Mac; quelli per Windows li crea GitHub Actions.
 
 ```text
-electron/   finestre, permessi, chiusura sicura
-server/     trascrizione, traduzione, gestione delle frasi, file dei sottotitoli
-public/     regia, impostazioni, uscite e cattura audio
-test/       test automatici e servizi finti
+src-tauri/src/      finestre, microfono, portachiavi, chiusura sicura
+src-tauri/server/   pagine, trascrizione, traduzione, OBS
+src-tauri/core/     testo, lingue, stili, impostazioni, file dei sottotitoli
+public/             regia, impostazioni e uscite
+test/               test automatici e servizi finti
 ```
 
 ## Licenza

@@ -1,5 +1,5 @@
 //! Collegamento ad AssemblyAI Streaming v3: sessione attiva, riconnessione e cambio di sessione prima
-//! del limite di 3 ore, senza perdere né duplicare il parlato. Stessa logica di `server/assemblyai.js`.
+//! del limite di 3 ore, senza perdere né duplicare il parlato.
 //!
 //! Tutto lo stato è dietro un solo blocco; ogni sessione ha un compito che legge e uno che scrive.
 use crate::{engine::{Engine, EngineConfig, Pending}, sentences::Final};

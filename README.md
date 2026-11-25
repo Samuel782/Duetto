@@ -29,7 +29,7 @@ No stenographer, no interpreters' booth, no code: one laptop and an audio feed f
 
 ## How it works
 
-Duetto runs on a **Mac** or a **Windows** PC. Transcription runs on [AssemblyAI](https://www.assemblyai.com) and translation on [DeepL](https://www.deepl.com/pro-api): you need a key for each, and both offer free credit to start. An hour of speech costs roughly one or two euros.
+Duetto runs on a **Mac** (macOS 14 or later) or a 64-bit **Windows** PC. Transcription runs on [AssemblyAI](https://www.assemblyai.com) and translation on [DeepL](https://www.deepl.com/pro-api): you need a key for each, and both offer free credit to start. An hour of speech costs roughly one or two euros.
 
 Download it from the [Releases](https://github.com/Samuel782/Duetto/releases) page, open it and paste the two keys. The interface is in English or Italian, following your computer's language or your choice in Settings. At startup Duetto tells you when a new version is available.
 
@@ -51,7 +51,7 @@ Commercial use is not free. That's how the project pays for itself:
 
 ## For developers
 
-You need [Node.js](https://nodejs.org) 20 or later.
+Duetto is written in Rust with [Tauri](https://tauri.app); the pages are HTML and JavaScript. You need [Rust](https://rustup.rs) and, for the tests, [Node.js](https://nodejs.org) 20 or later.
 
 ```bash
 npm install
@@ -61,13 +61,14 @@ npm install
 npm run app
 ```
 
-`npm test` runs the automated tests with fake services, with no network or credit needed. `npm run dist` builds the packages for Mac and Windows into `dist/`.
+`npm test` runs the automated tests with fake services, with no network or credit needed. `npm start` runs only the server, for use in a browser: it takes the keys from Settings or from the variables in `.env.example`. `npm run dist` builds the Mac package; GitHub Actions builds the Windows one.
 
 ```text
-electron/   windows, permissions, safe shutdown
-server/     transcription, translation, sentence processing, subtitle files
-public/     control room, settings, outputs and audio capture
-test/       automated tests and fake services
+src-tauri/src/      windows, microphone, keychain, safe shutdown
+src-tauri/server/   pages, transcription, translation, OBS
+src-tauri/core/     text, languages, styles, settings, subtitle files
+public/             control room, settings and outputs
+test/               automated tests and fake services
 ```
 
 ## Licence

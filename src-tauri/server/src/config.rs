@@ -1,4 +1,4 @@
-//! Le stesse variabili d'ambiente di `server/index.js`.
+//! Impostazioni dalle variabili d'ambiente, descritte in `.env.example`.
 use std::{env, path::PathBuf};
 
 pub struct Config {

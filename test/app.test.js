@@ -1,6 +1,7 @@
 // Prove dell'intero server contro i finti servizi: npm test
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
@@ -8,16 +9,13 @@ import path from 'node:path';
 import { afterEach, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
-import { parseGlossaryCsv } from '../server/deepl.js';
-import { TurnSegmenter } from '../server/segmenter.js';
-import { Settings, setSecretStore } from '../server/settings.js';
-import { Store } from '../server/store.js';
-import { checkForUpdate, isNewer } from '../server/updates.js';
-import { captionChunks, obsAuth } from '../server/obs.js';
 import { WebSocketServer } from 'ws';
-import { createCleaner } from '../server/textclean.js';
 import { FRAME_MAGIC, startMock } from './mock-services.js';
 
+const sha = (text) => crypto.createHash('sha256').update(text).digest('base64');
+const obsAuth = (password) => sha(`${sha(`${password}sale`)}sfida`);
+const EXE = process.platform === 'win32' ? '.exe' : '';
+const BIN = process.env.DUETTO_SERVER_BIN || fileURLToPath(new URL(`../src-tauri/server/target/release/duetto-server${EXE}`, import.meta.url));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function waitFor(check, timeoutMs, label) {
   const end = Date.now() + timeoutMs;
@@ -36,12 +34,11 @@ async function setup(extraEnv = {}, mockOptions = {}) {
   const mock = await startMock(mockOptions);
   const port = nextPort++;
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'duetto-test-'));
-  // DUETTO_SERVER_BIN: prova il server Rust con gli stessi test.
-  const bin = process.env.DUETTO_SERVER_BIN;
-  const child = spawn(bin || process.execPath, bin ? [] : ['server/index.js'], {
+  const child = spawn(BIN, [], {
     cwd: fileURLToPath(new URL('..', import.meta.url)),
     env: {
       PATH: process.env.PATH,
+      ...(process.env.SystemRoot && { SystemRoot: process.env.SystemRoot }),
       PORT: String(port), HOST: '127.0.0.1', DUETTO_LOCALE: 'it',
       ASSEMBLYAI_API_KEY: 'mock-key', ASSEMBLYAI_WS_URL: `ws://127.0.0.1:${mock.port}/v3/ws`,
       DEEPL_API_KEY: 'mock:fx', DEEPL_ENDPOINT: `http://127.0.0.1:${mock.port}`,
@@ -101,7 +98,7 @@ async function setup(extraEnv = {}, mockOptions = {}) {
     sse.destroy();
     child.kill('SIGKILL');
     await mock.close();
-    fs.rmSync(tmp, { recursive: true, force: true });
+    fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 10 });
   };
   const cmd = (m) => control.send(JSON.stringify(m));
   return { mock, port, events, statuses, messages, cmd, startAudio, stopAudio, close, tmp, getLogs: () => logs, control };
@@ -127,70 +124,6 @@ let ctx = null;
 afterEach(async () => {
   if (ctx) await ctx.close();
   ctx = null;
-});
-
-test('pulizia del testo', () => {
-  const clean = createCleaner();
-  assert.equal(clean('Ehm, vorrei cioè cioè dire una cosa.'), 'Vorrei cioè dire una cosa.');
-  assert.equal(clean('It was, you know, a good idea.'), 'It was, a good idea.');
-  assert.equal(clean('I like, um, pizza and I like you.'), 'I like, pizza and I like you.');
-  assert.equal(clean('Che cazzo succede?'), 'Che c***o succede?');
-  assert.equal(clean('This is bullshit.'), 'This is b******t.');
-  assert.equal(clean('Ehm.'), '');
-  const off = createCleaner({ fillers: false, profanity: false });
-  assert.equal(off('Ehm, che cazzo.'), 'Ehm, che cazzo.');
-});
-
-test('glossario CSV', () => {
-  const pairs = parseGlossaryCsv('# nota\nitaliano,inglese\nsala stampa,press room\n"a, b",c\nsala stampa,doppione\n');
-  assert.deepEqual(pairs, [['sala stampa', 'press room'], ['a, b', 'c']]);
-});
-
-test('segmentatore su parlato reale: blocchi brevi, nessuna parola persa', () => {
-  // 49 s di parlato continuo registrati da AssemblyAI: un unico turno da 991 caratteri.
-  const file = new URL('./fixtures/parlato-continuo.json', import.meta.url);
-  const messages = JSON.parse(fs.readFileSync(file, 'utf8'));
-  const toWords = (m) => m.words.map(([text, start, end]) => ({ text, start, end }));
-  const seg = new TurnSegmenter();
-  const blocks = [];
-  for (const m of messages) {
-    if (m.end_of_turn) {
-      const rest = seg.finish(toWords(m), m.transcript);
-      if (rest) blocks.push(rest.text);
-    } else {
-      blocks.push(...seg.update(toWords(m)).blocks.map((b) => b.text));
-    }
-  }
-  assert.ok(blocks.length >= 10, `troppo pochi blocchi: ${blocks.length}`);
-  assert.ok(blocks.every((b) => b.length <= 90), `blocco troppo lungo: ${Math.max(...blocks.map((b) => b.length))}`);
-  const norm = (s) => s.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, ' ').split(/\s+/).filter(Boolean);
-  const said = norm(messages.at(-1).transcript);
-  const got = norm(blocks.join(' '));
-  assert.ok(Math.abs(said.length - got.length) <= 2, `parole: ${said.length} contro ${got.length}`);
-  // Conta le parole in ordine, tollerando le revisioni isolate dei parziali.
-  let j = 0;
-  for (const word of got) if (said.indexOf(word, j) >= 0 && said.indexOf(word, j) <= j + 3) j = said.indexOf(word, j) + 1;
-  assert.ok(j >= said.length - 2, `allineate solo ${j} parole su ${said.length}`);
-});
-
-test('segmentatore: tempi instabili e parole ripetute non creano doppioni', () => {
-  // Caso reale: "…input channels or mix channels." ripetuto perché i tempi si spostavano.
-  const script = 'so you are not eating up any of those input channels or mix channels, every input channel has a preamp section, a gate and a compressor for the sound';
-  const all = script.split(' ').map((text, i) => ({ text, start: i * 300, end: i * 300 + 300 }));
-  const seg = new TurnSegmenter();
-  const blocks = [];
-  for (let n = 1; n <= all.length; n++) {
-    // A ogni messaggio i tempi delle parole già dette si spostano fino a 2 s in avanti o indietro.
-    const shift = (n % 5 - 2) * 1000;
-    const words = all.slice(0, n).map((w) => ({ ...w, start: w.start + shift, end: w.end + shift }));
-    // L'ultima parola è più avanti, così le precedenti risultano stabili.
-    words[words.length - 1] = { ...words[words.length - 1], end: words[words.length - 1].end + 2500 };
-    blocks.push(...seg.update(words).blocks.map((b) => b.text));
-  }
-  const rest = seg.finish(all, script);
-  if (rest) blocks.push(rest.text);
-  assert.ok(blocks.length >= 2, 'il turno viene diviso');
-  assert.equal(blocks.join(' '), script);
 });
 
 test('parlato senza pause: traduzione a blocchi, in ordine, lingua rilevata da DeepL', async () => {
@@ -426,7 +359,7 @@ test('Impostazioni: chiavi salvate e verificate, mai rimandate al browser', asyn
   assert.equal(view.keyterms, 'Maria Rossi\n');
 
   const file = path.join(ctx.tmp, 'data', 'settings.json');
-  assert.equal(fs.statSync(file).mode & 0o077, 0, 'file leggibile solo dal proprietario');
+  if (process.platform !== 'win32') assert.equal(fs.statSync(file).mode & 0o077, 0, 'file leggibile solo dal proprietario');
   assert.ok(!JSON.stringify(ctx.messages).includes('chiave-di-prova'), 'chiave mai rimandata');
   assert.ok(!JSON.stringify(ctx.messages).includes('mock-key'), 'chiave mai rimandata');
 
@@ -450,73 +383,28 @@ test('stato persistente e valori importati validati', async () => {
   assert.deepEqual(saved.presets.Prova, { size: 50, sizeTranslation: 50 });
 });
 
-test('stili della 1.0.1: la traduzione eredita il carattere unico', () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'duetto-store-'));
-  const file = path.join(tmp, 'state.json');
-  fs.writeFileSync(file, JSON.stringify({
-    outputs: { room: { style: { font: 'Verdana', weight: 400, size: 90 } } },
-    presets: { Vecchio: { size: 30 }, Nuovo: { size: 30, sizeTranslation: 20 } },
-  }));
-  const store = new Store(file, 'AUTO');
-  const room = store.state.outputs.room.style;
-  assert.equal(room.fontTranslation, 'Verdana');
-  assert.equal(room.weightTranslation, 400);
-  assert.equal(room.sizeTranslation, 90);
-  assert.equal(store.state.outputs.stream.style.sizeTranslation, 44, 'uscita non personalizzata');
-  assert.equal(store.state.presets.Vecchio.sizeTranslation, 30);
-  assert.equal(store.state.presets.Nuovo.sizeTranslation, 20, 'valore separato già scelto');
-  fs.rmSync(tmp, { recursive: true, force: true });
-});
-
-test('chiavi cifrate: migrazione, rilettura e chiave non decifrabile', () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'duetto-settings-'));
-  const file = path.join(tmp, 'settings.json');
-  // Cifratura finta ma reversibile, al posto del portachiavi del sistema.
-  const fake = {
-    encrypt: (t) => Buffer.from([...t].reverse().join('')).toString('base64'),
-    decrypt: (d) => [...Buffer.from(d, 'base64').toString()].reverse().join(''),
-  };
-  try {
-    fs.writeFileSync(file, JSON.stringify({ assemblyaiApiKey: 'aai-in-chiaro', deeplApiKey: '', assemblyaiRegion: 'marte' }));
-    setSecretStore(fake);
-    const first = new Settings(file);
-    assert.equal(first.values.assemblyaiApiKey, 'aai-in-chiaro');
-    assert.equal(first.values.assemblyaiRegion, 'auto', 'regione sconosciuta scartata');
-    const raw = fs.readFileSync(file, 'utf8');
-    assert.ok(!raw.includes('aai-in-chiaro'), 'la chiave in chiaro viene cifrata subito');
-    assert.match(JSON.parse(raw).assemblyaiApiKey, /^enc:v1:/);
-
-    first.update({ deeplApiKey: ' dl-nuova:fx ', assemblyaiRegion: 'eu' });
-    const again = new Settings(file);
-    assert.equal(again.values.deeplApiKey, 'dl-nuova:fx');
-    assert.equal(again.values.assemblyaiRegion, 'eu');
-
-    setSecretStore({ encrypt: fake.encrypt, decrypt: () => { throw new Error('portachiavi negato'); } });
-    const denied = new Settings(file);
-    assert.equal(denied.values.assemblyaiApiKey, '', 'chiave illeggibile: va reinserita, nessun crollo');
-
-    setSecretStore(null);
-    assert.equal(new Settings(file).values.deeplApiKey, '', 'senza cifratura la chiave cifrata non si usa');
-  } finally {
-    setSecretStore(null);
-    fs.rmSync(tmp, { recursive: true, force: true });
-  }
-});
-
 test('traduzioni inglesi: ogni testo dell\'interfaccia ha la sua', async () => {
   const root = fileURLToPath(new URL('..', import.meta.url));
   const dict = JSON.parse(fs.readFileSync(path.join(root, 'public/i18n/en.json'), 'utf8'));
   // Nomi propri e sigle restano uguali nelle due lingue.
   const same = new Set(['AUTO', 'IT', 'EN', 'Duetto', 'Audio', 'Font', 'Google Font', 'Preset', 'Streaming', 'File', 'English', 'Server', 'OBS']);
   const keys = new Set();
-  for (const f of ['public/control.js', 'public/settings.js', 'server/index.js', 'server/deepl.js', 'server/assemblyai.js', 'server/obs.js', 'electron/main.js']) {
+  for (const f of ['public/control.js', 'public/settings.js']) {
     const src = fs.readFileSync(path.join(root, f), 'utf8');
     for (const m of src.matchAll(/\bt\('((?:[^'\\]|\\.)*)'/g)) keys.add(m[1].replace(/\\'/g, "'"));
   }
-  const { STYLE_SCHEMA } = await import('../server/store.js');
-  const { LANGUAGES } = await import('../server/languages.js');
-  for (const l of LANGUAGES) keys.add(l.name);
-  for (const g of STYLE_SCHEMA) {
+  // In Rust: t(lingua, "testo", …), self.t("testo", …) e text("testo").
+  for (const dir of ['src-tauri/src', 'src-tauri/server/src']) {
+    for (const f of fs.readdirSync(path.join(root, dir))) {
+      const src = fs.readFileSync(path.join(root, dir, f), 'utf8');
+      for (const m of src.matchAll(/\bt\((?:[\w.]+, )?"((?:[^"\\]|\\.)*)", &\[|\btext\("([A-ZÀ-Ù][^"]*)"\)/g)) keys.add(m[1] ?? m[2]);
+    }
+  }
+  assert.ok(keys.has('Chiave mancante') && keys.has('Chiudere Duetto?'), 'testi Rust trovati');
+  const { schema } = JSON.parse(fs.readFileSync(path.join(root, 'src-tauri/core/src/styles.json'), 'utf8'));
+  const languages = fs.readFileSync(path.join(root, 'src-tauri/core/src/languages.rs'), 'utf8');
+  for (const m of languages.matchAll(/^    l\("\w+", "([^"]+)"/gm)) keys.add(m[1]);
+  for (const g of schema) {
     keys.add(g.group);
     for (const f of g.fields) { keys.add(f.label); for (const [, text] of f.options || []) keys.add(text); }
   }
@@ -537,34 +425,29 @@ test('traduzioni inglesi: ogni testo dell\'interfaccia ha la sua', async () => {
   }
 });
 
-test('aggiornamenti: confronto versioni e risposta di GitHub', async () => {
-  assert.equal(isNewer('1.10.0', '1.9.2'), true);
-  assert.equal(isNewer('v1.2.0', '1.2.0'), false);
-  assert.equal(isNewer('1.1.9', '1.2.0'), false);
-  assert.equal(isNewer('2.0', '1.9.9'), true);
-  assert.equal(isNewer('Duetto_1.2.2', '1.2.1'), true);
-  assert.equal(isNewer('Duetto_1.2.1', '1.2.1'), false);
-
-  let release = { tag_name: 'v1.3.0', html_url: 'https://github.com/Samuel782/Duetto/releases/tag/v1.3.0' };
-  const server = http.createServer((req, res) => {
-    if (release === 'error') { res.writeHead(500).end(); return; }
-    res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(release));
-  });
-  await new Promise((r) => server.listen(0, '127.0.0.1', r));
-  const api = `http://127.0.0.1:${server.address().port}/latest`;
-  try {
-    assert.deepEqual(await checkForUpdate('1.2.0', api), { version: '1.3.0', url: release.html_url });
-    assert.equal(await checkForUpdate('1.3.0', api), null, 'già aggiornata');
-    release = { ...release, prerelease: true };
-    assert.equal(await checkForUpdate('1.2.0', api), null, 'le pre-release non si segnalano');
-    release = { tag_name: 'v9.0.0', html_url: 'https://altro-sito.example/trappola' };
-    assert.equal((await checkForUpdate('1.2.0', api)).url, 'https://github.com/Samuel782/Duetto/releases', 'link solo verso GitHub');
-    release = 'error';
-    assert.equal(await checkForUpdate('1.2.0', api), null, 'errore di GitHub: nessun avviso');
-  } finally {
-    server.close();
+test('aggiornamenti: risposta di GitHub', async () => {
+  const page = 'https://github.com/Samuel782/Duetto/releases';
+  const release = { tag_name: 'v1.3.0', html_url: `${page}/tag/v1.3.0` };
+  for (const [answer, version, expected] of [
+    [release, '1.2.0', { version: '1.3.0', url: release.html_url }],
+    [release, '1.3.0', null],
+    [{ ...release, prerelease: true }, '1.2.0', null],
+    [{ tag_name: 'v9.0.0', html_url: 'https://altro-sito.example/trappola' }, '1.2.0', { version: '9.0.0', url: page }],
+    [null, '1.2.0', null],
+  ]) {
+    let asked = 0;
+    const server = http.createServer((req, res) => { asked += 1; res.writeHead(answer ? 200 : 500, { 'Content-Type': 'application/json' }).end(JSON.stringify(answer)); });
+    await new Promise((r) => server.listen(0, '127.0.0.1', r));
+    const c = await setup({ DUETTO_VERSION: version, DUETTO_UPDATE_API: `http://127.0.0.1:${server.address().port}/latest` });
+    try {
+      await waitFor(() => asked > 0, 8000, 'richiesta');
+      await sleep(1500);
+      assert.deepEqual(c.statuses.at(-1).update, expected, `${version} ${JSON.stringify(answer)}`);
+    } finally {
+      await c.close();
+      server.close();
+    }
   }
-  assert.equal(await checkForUpdate('1.2.0', 'http://127.0.0.1:1/chiuso'), null, 'senza rete: nessun avviso');
 });
 
 test('privacy: file disattivabili e sottotitoli chiusi alla rete', async () => {
@@ -659,7 +542,7 @@ test('sottotitoli nativi: OBS con password riceve il testo nella lingua scelta',
     ws.on('message', (raw) => {
       const m = JSON.parse(raw.toString());
       if (m.op === 1) {
-        if (m.d.authentication !== obsAuth(password, 'sale', 'sfida')) { ws.close(4009, 'Authentication failed'); return; }
+        if (m.d.authentication !== obsAuth(password)) { ws.close(4009, 'Authentication failed'); return; }
         ws.send(JSON.stringify({ op: 2, d: { negotiatedRpcVersion: 1 } }));
       } else if (m.op === 6) {
         if (m.d.requestType === 'SendStreamCaption') captions.push(m.d.requestData.captionText);
@@ -692,9 +575,3 @@ test('sottotitoli nativi: OBS con password riceve il testo nella lingua scelta',
   }
 });
 
-test('sottotitoli nativi: pezzi di due righe senza parole spezzate', () => {
-  const chunks = captionChunks('Buongiorno a tutti e benvenuti alla prima sessione della giornata, che oggi parla di sottotitoli in diretta.');
-  assert.ok(chunks.length >= 2);
-  assert.ok(chunks.every((c) => c.length <= 64));
-  assert.equal(chunks.join(' '), 'Buongiorno a tutti e benvenuti alla prima sessione della giornata, che oggi parla di sottotitoli in diretta.');
-});

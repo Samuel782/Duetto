@@ -7,105 +7,21 @@
   "type": "module",
   "private": true,
   "license": "PolyForm-Noncommercial-1.0.0",
-  "main": "electron/main.js",
   "engines": {
     "node": ">=20.6"
   },
   "scripts": {
-    "app": "electron .",
-    "dist": "electron-builder --mac --win && npm run sbom",
-    "sbom": "node scripts/make-sbom.mjs",
-    "dist:mac": "electron-builder --mac",
-    "dist:mac:glass": "electron-builder --mac -c.mac.icon=build/Duetto.icon",
-    "icon": "electron scripts/make-icon.mjs",
-    "dist:win": "electron-builder --win",
-    "dist:win:installer": "electron-builder --win nsis portable",
-    "start": "caffeinate -dims node --env-file=.env server/index.js",
-    "start:plain": "node --env-file=.env server/index.js",
+    "app": "cargo run --release --manifest-path src-tauri/Cargo.toml --features custom-protocol",
+    "start": "cargo run --release --manifest-path src-tauri/server/Cargo.toml",
+    "test": "npm run test:rust && npm run test:app",
+    "test:rust": "cargo test --release --locked --manifest-path src-tauri/core/Cargo.toml && cargo test --release --locked --manifest-path src-tauri/server/Cargo.toml",
+    "test:app": "cargo build --release --locked --manifest-path src-tauri/server/Cargo.toml && node --test test/app.test.js",
+    "licenses": "node scripts/licenses.mjs",
+    "dist": "src-tauri/package-mac.sh",
     "send-audio": "node test/send-audio.js",
-    "mock": "node test/mock-services.js",
-    "test": "node --test test/app.test.js"
-  },
-  "dependencies": {
-    "ws": "^8.18.0"
+    "mock": "node test/mock-services.js"
   },
   "devDependencies": {
-    "electron": "^45.4.1",
-    "electron-builder": "^26.18.0"
-  },
-  "build": {
-    "appId": "com.samuelluggeri.duetto",
-    "productName": "Duetto",
-    "artifactName": "Duetto-${version}-${os}-${arch}.${ext}",
-    "directories": {
-      "output": "dist",
-      "buildResources": "build"
-    },
-    "files": [
-      "electron/**",
-      "server/**",
-      "public/**",
-      "package.json"
-    ],
-    "extraResources": [
-      {
-        "from": "LICENSE",
-        "to": "LICENSE.duetto.txt"
-      },
-      {
-        "from": "THIRD-PARTY-NOTICES.md",
-        "to": "THIRD-PARTY-NOTICES.md"
-      },
-      {
-        "from": "PRIVACY.md",
-        "to": "PRIVACY.md"
-      },
-      {
-        "from": "PRIVACY.it.md",
-        "to": "PRIVACY.it.md"
-      }
-    ],
-    "electronLanguages": [
-      "en",
-      "en-GB",
-      "it"
-    ],
-    "mac": {
-      "category": "public.app-category.video",
-      "identity": "-",
-      "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "arm64",
-            "x64"
-          ]
-        }
-      ],
-      "hardenedRuntime": true,
-      "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.plist",
-      "extendInfo": {
-        "NSMicrophoneUsageDescription": "Duetto ascolta l'ingresso audio scelto per trascrivere chi parla."
-      }
-    },
-    "win": {
-      "target": [
-        {
-          "target": "zip",
-          "arch": [
-            "x64"
-          ]
-        }
-      ]
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "artifactName": "Duetto-${version}-Windows-installazione.${ext}"
-    },
-    "portable": {
-      "artifactName": "Duetto-${version}-Windows-portatile.${ext}"
-    }
+    "ws": "^8.18.0"
   }
 }

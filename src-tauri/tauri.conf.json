@@ -4,5 +4,5 @@
   "identifier": "com.samuelluggeri.duetto2",
   "build": { "frontendDist": "./empty" },
   "app": { "windows": [], "security": { "csp": null } },
-  "bundle": { "active": false, "icon": ["icons/icon.png"] }
+  "bundle": { "active": false, "icon": ["icons/icon.png", "icons/icon.icns", "icons/icon.ico"] }
 }

@@ -1,4 +1,4 @@
-// Server da riga di comando, con le stesse variabili d'ambiente di server/index.js.
+// Server da riga di comando. Le variabili d'ambiente sono in .env.example.
 use duetto_core::log;
 use duetto_server::{app::App, config::Config, assembly::{AssemblyLink, LinkConfig}, start};
 

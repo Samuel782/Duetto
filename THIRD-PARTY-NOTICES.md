@@ -4,36 +4,33 @@ Duetto's own code is covered by [LICENSE](LICENSE). The packages also contain:
 
 | Component | Licence | Full text in the package |
 |---|---|---|
-| [ws](https://github.com/websockets/ws) | MIT | Reproduced below |
-| [Electron](https://github.com/electron/electron) | MIT | `LICENSE.electron.txt` |
-| [Chromium](https://www.chromium.org) and the components it includes | Various, mostly BSD-style | `LICENSES.chromium.html` |
-| [FFmpeg](https://ffmpeg.org), built by the Electron project as a separate dynamic library | LGPL 2.1 or later | `LICENSES.chromium.html` |
-| [Node.js](https://nodejs.org), included in Electron | MIT and others | `LICENSES.chromium.html` |
+| Rust libraries, including [Tauri](https://tauri.app) | MIT, Apache 2.0, BSD, ISC, Zlib, Unicode, MPL 2.0 and others | `LICENSES.rust.txt` |
+| [Rust standard library](https://github.com/rust-lang/rust) | MIT or Apache 2.0 | `LICENSES.rust.txt` has the text of both licences |
+| Microsoft Edge WebView2 loader (Windows only) | [Microsoft WebView2 SDK licence](https://www.nuget.org/packages/Microsoft.Web.WebView2/) | Reproduced below |
 
-Electron is distributed unmodified. The source matching each Electron release, including the FFmpeg revision and
-its build configuration, is available from the [Electron repository](https://github.com/electron/electron).
-Exact versions are listed in the SBOM generated with `npm run sbom`.
+Pages are shown by the web engine already in the operating system (WebKit on Mac, WebView2 on Windows), which is not
+included. `LICENSES.rust.txt` lists every library with its version, its licence and the address of its source code,
+which is used unmodified. The same list is in the SBOM published with each release.
 Duetto's licence does not limit the rights that these licences give you on their components.
 
-## ws
+## Microsoft Edge WebView2 loader
 
-Copyright (c) 2011 Einar Otto Stangvik <einaros@gmail.com>
-Copyright (c) 2013 Arnout Kazemier and contributors
-Copyright (c) 2016 Luigi Pinca and contributors
+Copyright (C) Microsoft Corporation. All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of
-this software and associated documentation files (the "Software"), to deal in
-the Software without restriction, including without limitation the rights to
-use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
-the Software, and to permit persons to whom the Software is furnished to do so,
-subject to the following conditions:
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
+following conditions are met:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+* Redistributions of source code must retain the above copyright notice, this list of conditions and the following
+  disclaimer.
+* Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following
+  disclaimer in the documentation and/or other materials provided with the distribution.
+* The name of Microsoft Corporation, or the names of its contributors may not be used to endorse or promote products
+  derived from this software without specific prior written permission.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
-FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
-COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
-IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
-CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.

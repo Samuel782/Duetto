@@ -1,5 +1,5 @@
-# Crea i pacchetti di Duetto sui Mac di GitHub, come "npm run dist" sul computer.
-# Parte a mano da Actions → "Pacchetti" → "Run workflow", oppure da sola con un tag v1.2.2 e simili.
+# Crea i pacchetti di Duetto per Mac e Windows sui computer di GitHub.
+# Parte a mano da Actions → "Pacchetti" → "Run workflow", oppure da sola con un tag v2.0.0 e simili.
 # I file finiscono tra gli artefatti dell'esecuzione: la release su GitHub resta da fare a mano.
 name: Pacchetti
 
@@ -12,37 +12,87 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  mac:
     runs-on: macos-15
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
-
       - uses: actions/setup-node@v7
         with:
           node-version: 26
           cache: npm
-
       - run: npm ci
-
+      - run: rustup update stable --no-self-update && rustup default stable && rustup target add aarch64-apple-darwin x86_64-apple-darwin
       - name: Test
         run: npm test
-
-      - name: Mac (Apple e Intel)
-        run: npx electron-builder --mac --publish never
-
-      - name: Windows
-        run: npx electron-builder --win --publish never
-
-      - name: Elenco dei componenti (SBOM)
-        run: npm run sbom
-
+      - name: Test del microfono
+        run: cargo test --release --locked --manifest-path src-tauri/Cargo.toml
+      - name: Pacchetti
+        run: src-tauri/package-mac.sh arm64 && src-tauri/package-mac.sh x64
+      # Su Apple Silicon il pacchetto Intel gira con Rosetta: basta per sapere che parte.
+      - name: Avvio dei pacchetti
+        run: |
+          for a in arm64 x64; do
+            hdiutil attach -quiet -nobrowse -mountpoint /tmp/d-$a dist/Duetto-*-mac-$a.dmg
+            file /tmp/d-$a/Duetto.app/Contents/MacOS/Duetto
+            DUETTO_TEST=1 DUETTO_DATA_DIR=/tmp/data-$a OUTPUT_DIR=/tmp/out-$a HOST=127.0.0.1 PORT=8787 /tmp/d-$a/Duetto.app/Contents/MacOS/Duetto > /tmp/log-$a 2>&1 &
+            pid=$!
+            for i in $(seq 1 40); do curl -sf -o /dev/null http://localhost:8787/control && break; sleep 1; done
+            curl -sf -o /dev/null -w "$a %{http_code}\n" http://localhost:8787/control || { cat /tmp/log-$a; exit 1; }
+            kill -9 $pid; sleep 2
+          done
       - uses: actions/upload-artifact@v7
         with:
-          name: Duetto
+          name: mac
           path: |
             dist/*.dmg
-            dist/*.zip
             dist/*.cdx.json
+          if-no-files-found: error
+          retention-days: 30
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+      - run: rustup update stable --no-self-update && rustup default stable
+      - name: Test
+        run: npm test
+      - name: Test del microfono
+        run: cargo test --release --locked --manifest-path src-tauri/Cargo.toml
+      - name: Pacchetto
+        env:
+          # Nessuna libreria di Visual C++ da installare a parte.
+          RUSTFLAGS: -C target-feature=+crt-static
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          cargo build --release --locked --features custom-protocol --manifest-path src-tauri/Cargo.toml
+          node scripts/licenses.mjs
+          mkdir -p stage/Duetto
+          cp src-tauri/target/release/duetto-tauri.exe stage/Duetto/Duetto.exe
+          cp LICENSE stage/Duetto/LICENSE.duetto.txt
+          cp THIRD-PARTY-NOTICES.md PRIVACY.md PRIVACY.it.md dist/LICENSES.rust.txt stage/Duetto/
+          (cd stage && 7z a -tzip "../dist/Duetto-$VERSION-win-x64.zip" Duetto)
+      - name: Avvio del pacchetto
+        run: |
+          DUETTO_TEST=1 DUETTO_DATA_DIR="$RUNNER_TEMP/data" OUTPUT_DIR="$RUNNER_TEMP/out" HOST=127.0.0.1 PORT=8787 stage/Duetto/Duetto.exe &
+          for i in $(seq 1 40); do curl -sf -o /dev/null http://localhost:8787/control && break; sleep 1; done
+          cat "$RUNNER_TEMP/data/app.log" || true
+          curl -sf -o /dev/null -w "windows %{http_code}\n" http://localhost:8787/control
+          sleep 8
+          cat "$RUNNER_TEMP/data/app.log"
+          taskkill //F //IM Duetto.exe
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows
+          path: dist/*.zip
           if-no-files-found: error
           retention-days: 30

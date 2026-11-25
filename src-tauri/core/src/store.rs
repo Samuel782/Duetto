@@ -1,4 +1,4 @@
-//! Stato persistente: modalità, lingue, stili e preset. Stesso file di `server/store.js`.
+//! Stato persistente: modalità, lingue, stili e preset. Il file è lo stesso della versione 1.
 use crate::{files::write_atomic, js, languages::*, log::warn};
 use fancy_regex::Regex;
 use serde::Serialize;
@@ -9,7 +9,7 @@ pub const OUTPUTS: [&str; 2] = ["stream", "room"];
 pub const VIEWS: [&str; 3] = ["both", "translation", "original"];
 pub type Style = Map<String, Value>;
 
-/// Schema del pannello e stili predefiniti, estratti da `server/store.js`.
+/// Schema del pannello e stili predefiniti.
 static STYLES: LazyLock<Value> = LazyLock::new(|| serde_json::from_str(include_str!("styles.json")).expect("styles.json"));
 static FONT: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[\p{L}\p{N} ,'-]{1,80}\z").unwrap());
 

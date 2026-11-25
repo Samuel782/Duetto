@@ -126,6 +126,20 @@ fn stop_server() {
     log("Chiuso in ordine");
 }
 
+// Al primo avvio riprende lingue, stili, preset, termini e glossario della 1.x, che restano dov'erano.
+// Le chiavi no: quella versione le cifrava in un altro modo e vanno reinserite.
+fn import_from_1x(old: &std::path::Path, new: &std::path::Path) {
+    if new.join("state.json").exists() { return; }
+    for name in ["state.json", "settings.json", "keyterms.txt", "glossario.csv"] {
+        let (from, to) = (old.join(name), new.join(name));
+        if !from.exists() || to.exists() { continue; }
+        match std::fs::copy(&from, &to) {
+            Ok(_) => log(format!("Ripreso dalla versione 1: {name}")),
+            Err(e) => warn(format!("Non ripreso dalla versione 1: {name}: {e}")),
+        }
+    }
+}
+
 // Avvia il server e restituisce la porta.
 fn start_server(app: &AppHandle) -> Result<u16, String> {
     let data = match std::env::var("DUETTO_DATA_DIR") {
@@ -134,6 +148,9 @@ fn start_server(app: &AppHandle) -> Result<u16, String> {
     };
     std::fs::create_dir_all(&data).map_err(|e| e.to_string())?;
     duetto_core::log::to_file(data.join("app.log"));
+    if std::env::var("DUETTO_DATA_DIR").is_err() {
+        if let Ok(all) = app.path().data_dir() { import_from_1x(&all.join("Duetto"), &data); }
+    }
     let mut cfg = Config::from_env();
     cfg.keyterms = data.join("keyterms.txt");
     cfg.glossary = data.join("glossario.csv");

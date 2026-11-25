@@ -1,4 +1,4 @@
-//! Impostazioni dell'utente, chiavi API comprese. Stesso file di `server/settings.js`.
+//! Impostazioni dell'utente, chiavi API comprese. Il file è lo stesso della versione 1.
 use crate::{files::write_atomic, i18n::UI_LANGUAGES, js, log::warn, notice::MAX_NOTICE};
 use aes_gcm::{aead::Aead, Aes256Gcm, KeyInit, Nonce};
 use base64::{engine::general_purpose::STANDARD, Engine};
