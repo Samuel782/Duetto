@@ -223,5 +223,5 @@ if (process.argv[1]?.endsWith('mock-services.js')) {
   const port = Number(process.env.MOCK_PORT) || 9099;
   const mock = await startMock({ port, log: console.log });
   console.log(`Finti servizi su porta ${mock.port}. Avvia l'app con:`);
-  console.log(`ASSEMBLYAI_API_KEY=mock-key ASSEMBLYAI_WS_URL=ws://127.0.0.1:${mock.port}/v3/ws DEEPL_API_KEY=mock:fx DEEPL_ENDPOINT=http://127.0.0.1:${mock.port} node server/index.js`);
+  console.log(`ASSEMBLYAI_API_KEY=mock-key ASSEMBLYAI_WS_URL=ws://127.0.0.1:${mock.port}/v3/ws DEEPL_API_KEY=mock:fx DEEPL_ENDPOINT=http://127.0.0.1:${mock.port} npm start`);
 }
