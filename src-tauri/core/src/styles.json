@@ -1,0 +1,402 @@
+{
+ "schema": [
+  {
+   "group": "Originale",
+   "fields": [
+    {
+     "key": "font",
+     "label": "Font",
+     "type": "font"
+    },
+    {
+     "key": "fontSource",
+     "label": "Origine",
+     "type": "select",
+     "options": [
+      [
+       "system",
+       "Di sistema"
+      ],
+      [
+       "google",
+       "Google Font"
+      ]
+     ]
+    },
+    {
+     "key": "weight",
+     "label": "Peso",
+     "type": "number",
+     "min": 100,
+     "max": 900,
+     "step": 100
+    },
+    {
+     "key": "size",
+     "label": "Dimensione",
+     "type": "number",
+     "min": 12,
+     "max": 200,
+     "step": 1
+    },
+    {
+     "key": "fontStyle",
+     "label": "Stile",
+     "type": "select",
+     "options": [
+      [
+       "normal",
+       "Normale"
+      ],
+      [
+       "italic",
+       "Corsivo"
+      ]
+     ]
+    },
+    {
+     "key": "colorOriginal",
+     "label": "Colore",
+     "type": "color"
+    }
+   ]
+  },
+  {
+   "group": "Traduzione",
+   "fields": [
+    {
+     "key": "fontTranslation",
+     "label": "Font",
+     "type": "font"
+    },
+    {
+     "key": "fontSourceTranslation",
+     "label": "Origine",
+     "type": "select",
+     "options": [
+      [
+       "system",
+       "Di sistema"
+      ],
+      [
+       "google",
+       "Google Font"
+      ]
+     ]
+    },
+    {
+     "key": "weightTranslation",
+     "label": "Peso",
+     "type": "number",
+     "min": 100,
+     "max": 900,
+     "step": 100
+    },
+    {
+     "key": "sizeTranslation",
+     "label": "Dimensione",
+     "type": "number",
+     "min": 12,
+     "max": 200,
+     "step": 1
+    },
+    {
+     "key": "fontStyleTranslation",
+     "label": "Stile",
+     "type": "select",
+     "options": [
+      [
+       "normal",
+       "Normale"
+      ],
+      [
+       "italic",
+       "Corsivo"
+      ]
+     ]
+    },
+    {
+     "key": "colorTranslation",
+     "label": "Colore",
+     "type": "color"
+    }
+   ]
+  },
+  {
+   "group": "Contorno e ombra",
+   "fields": [
+    {
+     "key": "outlineColor",
+     "label": "Contorno",
+     "type": "color"
+    },
+    {
+     "key": "outlineWidth",
+     "label": "Spessore contorno",
+     "type": "number",
+     "min": 0,
+     "max": 12,
+     "step": 0.5
+    },
+    {
+     "key": "shadowColor",
+     "label": "Ombra",
+     "type": "color"
+    },
+    {
+     "key": "shadowBlur",
+     "label": "Sfocatura ombra",
+     "type": "number",
+     "min": 0,
+     "max": 40,
+     "step": 1
+    },
+    {
+     "key": "shadowOffset",
+     "label": "Distanza ombra",
+     "type": "number",
+     "min": 0,
+     "max": 30,
+     "step": 1
+    }
+   ]
+  },
+  {
+   "group": "Sfondo",
+   "fields": [
+    {
+     "key": "bgMode",
+     "label": "Tipo",
+     "type": "select",
+     "options": [
+      [
+       "none",
+       "Nessuno"
+      ],
+      [
+       "box",
+       "Riquadro"
+      ],
+      [
+       "full",
+       "Pieno"
+      ]
+     ]
+    },
+    {
+     "key": "bgColor",
+     "label": "Colore",
+     "type": "color"
+    },
+    {
+     "key": "bgOpacity",
+     "label": "Opacità",
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "step": 0.05
+    }
+   ]
+  },
+  {
+   "group": "Posizione",
+   "fields": [
+    {
+     "key": "align",
+     "label": "Allineamento",
+     "type": "select",
+     "options": [
+      [
+       "left",
+       "Sinistra"
+      ],
+      [
+       "center",
+       "Centro"
+      ],
+      [
+       "right",
+       "Destra"
+      ]
+     ]
+    },
+    {
+     "key": "position",
+     "label": "Posizione",
+     "type": "select",
+     "options": [
+      [
+       "top",
+       "Alto"
+      ],
+      [
+       "center",
+       "Centro"
+      ],
+      [
+       "bottom",
+       "Basso"
+      ]
+     ]
+    },
+    {
+     "key": "marginX",
+     "label": "Margine laterale",
+     "type": "number",
+     "min": 0,
+     "max": 600,
+     "step": 1
+    },
+    {
+     "key": "marginY",
+     "label": "Margine verticale",
+     "type": "number",
+     "min": 0,
+     "max": 500,
+     "step": 1
+    }
+   ]
+  },
+  {
+   "group": "Impaginazione",
+   "fields": [
+    {
+     "key": "lines",
+     "label": "Righe per lingua",
+     "type": "number",
+     "min": 1,
+     "max": 8,
+     "step": 1
+    },
+    {
+     "key": "charsPerLine",
+     "label": "Caratteri per riga",
+     "type": "number",
+     "min": 10,
+     "max": 120,
+     "step": 1
+    },
+    {
+     "key": "lineHeight",
+     "label": "Interlinea",
+     "type": "number",
+     "min": 0.8,
+     "max": 2.5,
+     "step": 0.05
+    },
+    {
+     "key": "gap",
+     "label": "Spazio tra le lingue",
+     "type": "number",
+     "min": 0,
+     "max": 200,
+     "step": 1
+    },
+    {
+     "key": "order",
+     "label": "Ordine",
+     "type": "select",
+     "options": [
+      [
+       "original",
+       "Originale sopra"
+      ],
+      [
+       "translation",
+       "Traduzione sopra"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "group": "Dissolvenza",
+   "fields": [
+    {
+     "key": "fadeDuration",
+     "label": "Durata (s)",
+     "type": "number",
+     "min": 0,
+     "max": 10,
+     "step": 0.1
+    },
+    {
+     "key": "fadeAfter",
+     "label": "Sparisce dopo (s)",
+     "type": "number",
+     "min": 1,
+     "max": 120,
+     "step": 1
+    }
+   ]
+  }
+ ],
+ "defaults": {
+  "stream": {
+   "font": "Arial",
+   "fontSource": "system",
+   "weight": 700,
+   "size": 44,
+   "fontStyle": "normal",
+   "fontTranslation": "Arial",
+   "fontSourceTranslation": "system",
+   "weightTranslation": 700,
+   "sizeTranslation": 44,
+   "fontStyleTranslation": "normal",
+   "colorOriginal": "#ffffff",
+   "colorTranslation": "#ffffff",
+   "outlineColor": "#000000",
+   "outlineWidth": 3,
+   "shadowColor": "#000000",
+   "shadowBlur": 6,
+   "shadowOffset": 2,
+   "bgMode": "none",
+   "bgColor": "#000000",
+   "bgOpacity": 0.6,
+   "align": "center",
+   "position": "bottom",
+   "marginX": 80,
+   "marginY": 60,
+   "lines": 2,
+   "charsPerLine": 42,
+   "lineHeight": 1.2,
+   "gap": 14,
+   "order": "original",
+   "fadeDuration": 0.6,
+   "fadeAfter": 6
+  },
+  "room": {
+   "font": "Arial",
+   "fontSource": "system",
+   "weight": 700,
+   "size": 72,
+   "fontStyle": "normal",
+   "fontTranslation": "Arial",
+   "fontSourceTranslation": "system",
+   "weightTranslation": 700,
+   "sizeTranslation": 72,
+   "fontStyleTranslation": "normal",
+   "colorOriginal": "#ffffff",
+   "colorTranslation": "#ffd84d",
+   "outlineColor": "#000000",
+   "outlineWidth": 0,
+   "shadowColor": "#000000",
+   "shadowBlur": 0,
+   "shadowOffset": 0,
+   "bgMode": "full",
+   "bgColor": "#000000",
+   "bgOpacity": 1,
+   "align": "center",
+   "position": "center",
+   "marginX": 80,
+   "marginY": 60,
+   "lines": 3,
+   "charsPerLine": 40,
+   "lineHeight": 1.25,
+   "gap": 40,
+   "order": "original",
+   "fadeDuration": 0.6,
+   "fadeAfter": 6
+  }
+ }
+}

@@ -36,7 +36,9 @@ async function setup(extraEnv = {}, mockOptions = {}) {
   const mock = await startMock(mockOptions);
   const port = nextPort++;
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'duetto-test-'));
-  const child = spawn(process.execPath, ['server/index.js'], {
+  // DUETTO_SERVER_BIN: prova il server Rust con gli stessi test.
+  const bin = process.env.DUETTO_SERVER_BIN;
+  const child = spawn(bin || process.execPath, bin ? [] : ['server/index.js'], {
     cwd: fileURLToPath(new URL('..', import.meta.url)),
     env: {
       PATH: process.env.PATH,
