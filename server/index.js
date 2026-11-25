@@ -1,6 +1,7 @@
 // Server locale: pagine, audio dal browser, trascrizione, traduzione e invio agli overlay.
 import fs from 'node:fs';
 import http from 'node:http';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -514,10 +515,16 @@ function handleAudio(ws, data) {
 // --- HTTP ---
 
 const isLocal = (req) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
-const controlAllowed = (req) => CONTROL_ALLOW_LAN || isLocal(req);
+// Un sito estraneo può far puntare il proprio nome a 127.0.0.1 e presentarsi come locale (DNS rebinding):
+// si risponde solo a "localhost" o a un indirizzo numerico, che un sito non può fingere.
+function trustedHost(req) {
+  const name = (req.headers.host || '').replace(/:\d*$/, '').replace(/^\[(.*)\]$/, '$1').toLowerCase();
+  return name === 'localhost' || net.isIP(name) !== 0;
+}
+const controlAllowed = (req) => CONTROL_ALLOW_LAN || (isLocal(req) && trustedHost(req));
 // I sottotitoli escono da questo computer solo se l'operatore lo permette.
 const overlayLan = () => OVERLAY_ALLOW_LAN || settings.values.overlayLan;
-const overlayAllowed = (req) => overlayLan() || isLocal(req);
+const overlayAllowed = (req) => overlayLan() || (isLocal(req) && trustedHost(req));
 
 function closeRemoteOverlays() {
   for (const out of OUTPUTS) for (const res of sseClients[out]) if (!isLocal(res.req)) res.destroy();
@@ -527,7 +534,7 @@ function closeRemoteOverlays() {
 function sameOrigin(req) {
   const { origin, host } = req.headers;
   if (!origin) return true;
-  try { return new URL(origin).host === host; } catch { return false; }
+  try { return new URL(origin).host === host.toLowerCase(); } catch { return false; }
 }
 
 const CONTROL_FILES = {
