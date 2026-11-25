@@ -20,7 +20,7 @@ use tauri::{
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_opener::OpenerExt;
 
-const KEYCHAIN: &str = "com.samuelluggeri.duetto.prototipo";
+const KEYCHAIN: &str = "com.samuelluggeri.duetto2";
 
 static SERVER: OnceLock<Arc<App>> = OnceLock::new();
 static QUIT_ASKED: AtomicBool = AtomicBool::new(false);

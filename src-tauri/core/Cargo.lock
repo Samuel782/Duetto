@@ -181,7 +181,7 @@ dependencies = [
 
 [[package]]
 name = "duetto-core"
-version = "0.0.1"
+version = "2.0.0"
 dependencies = [
  "aes-gcm",
  "base64",
